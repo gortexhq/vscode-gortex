@@ -5,6 +5,17 @@ All notable changes to **Gortex for VS Code** are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.3.7] - 2026-05-17
+
+### Fixed
+- **`Gortex: Rebuild Index from Scratch` could leave the daemon stopped.**
+  The previous version used fire-and-forget `spawn` for the restart, which
+  could race with the snapshot wipe and silently fail to start the daemon.
+  Now uses awaited `run(['daemon','start','--detach'])` — the CLI exits
+  once it has forked the background process, giving us a clear success or
+  failure signal before we start polling. Also surfaces an explicit error
+  if the daemon never becomes reachable within 10 minutes.
+
 ## [0.3.6] - 2026-05-17
 
 ### Fixed

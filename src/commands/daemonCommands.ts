@@ -88,19 +88,34 @@ export function registerDaemonCommands(
             }
 
             progress.report({ message: 'starting daemon (full re-index)…' });
-            cli.spawnDetached(['daemon', 'start', '--detach']);
+            // Use awaited `run` instead of fire-and-forget `spawnDetached`:
+            // `gortex daemon start --detach` exits once it has forked the
+            // background daemon, so we get a clear success/failure signal
+            // before we start polling. The previous fire-and-forget path
+            // could race with the snapshot wipe and silently fail to start
+            // the daemon — leaving the user with no daemon at all.
+            try {
+              await cli.run(['daemon', 'start', '--detach']);
+            } catch (err) {
+              throw new Error(`daemon start failed: ${(err as Error).message}`);
+            }
 
             // Poll until daemon hits 'ready'. The re-index is the expensive
             // part — we report progress so the user knows we're not stuck.
             const start = Date.now();
             const ceilingMs = 10 * 60_000;
+            let sawAlive = false;
             while (Date.now() - start < ceilingMs) {
               await delay(2_000);
               try {
                 const s = await cli.daemonStatus();
+                if (s.running) sawAlive = true;
                 if (s.running && s.state && /^ready\b/i.test(s.state)) break;
                 if (s.state) progress.report({ message: `${s.state}…` });
               } catch { /* daemon not up yet */ }
+            }
+            if (!sawAlive) {
+              throw new Error('daemon never became reachable — check `View → Output → Gortex` and `gortex daemon logs`');
             }
             await statusBar.refresh();
             vscode.window.showInformationMessage('Gortex: index rebuilt.');
