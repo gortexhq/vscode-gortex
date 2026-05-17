@@ -134,8 +134,9 @@ export class AnalyzeCache implements vscode.Disposable {
       this.queries.analyze('dead_code', wideOpts).catch(() => ({ dead_code: [] })),
       this.queries.analyze('cycles', wideOpts).catch(() => ({ cycles: [] })),
     ]);
+    const deadRaw = (dead as { dead_code?: AnalyzeSymbol[] }).dead_code ?? [];
     this.hotspotsByFile = bucketByFile((hot as { hotspots?: AnalyzeSymbol[] }).hotspots ?? []);
-    this.deadByFile = bucketByFile((dead as { dead_code?: AnalyzeSymbol[] }).dead_code ?? []);
+    this.deadByFile = bucketByFile(deadRaw.filter(isMeaningfulDeadCodeKind));
     this.cycles = (cycles as { cycles?: AnalyzeCycle[] }).cycles ?? [];
     this.hotIds = new Set([...this.hotspotsByFile.values()].flat().map(s => s.id));
     this.deadIds = new Set([...this.deadByFile.values()].flat().map(s => s.id));
@@ -174,4 +175,30 @@ function bucketByFile(symbols: AnalyzeSymbol[]): Map<string, AnalyzeSymbol[]> {
     out.set(s.file_path, arr);
   }
   return out;
+}
+
+/**
+ * The daemon's `dead_code` analyzer ships its own kind filter (functions,
+ * methods, types, interfaces by default), but the extension applies a
+ * second pass as defense-in-depth: if a future daemon version regresses
+ * and starts surfacing fields / params / npm modules / TODO comments
+ * again, the user shouldn't see skulls plastered on every line of every
+ * file. The set below is the agreed visual contract — show gutters and
+ * decorations only for top-level definitional symbols where "is this
+ * dead?" has an unambiguous answer.
+ *
+ * Mirror the daemon's `neverDeadCodeKinds` set
+ * (gortex/internal/analysis/deadcode.go) — both sides must agree.
+ */
+const MEANINGFUL_DEAD_CODE_KINDS = new Set([
+  'function', 'method', 'type', 'interface',
+  // The opt-in kinds: if the user explicitly enabled them on the
+  // daemon side, the extension still shows them. Skip param / closure
+  // / module / string / enum_member / etc. unconditionally — those
+  // are noise regardless of opt-in.
+  'field', 'variable', 'constant',
+]);
+
+function isMeaningfulDeadCodeKind(s: AnalyzeSymbol): boolean {
+  return MEANINGFUL_DEAD_CODE_KINDS.has(s.kind);
 }
