@@ -5,6 +5,29 @@ All notable changes to **Gortex for VS Code** are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.3.5] - 2026-05-17
+
+### Added
+- **`Gortex: Rebuild Index from Scratch` command.** One-click escape hatch
+  for the stale-snapshot class of bugs surfaced today: stops the daemon,
+  deletes `~/.cache/gortex/daemon.gob.gz`, restarts so the next warmup does
+  a full re-extract + re-resolve. Confirmation prompt + progress
+  notification while indexing.
+
+### Context
+- The companion gortex commit (`snapshot: stamp + verify daemon binary
+  fingerprint on load`) makes the daemon do this automatically on every
+  rebuild. This command is the manual lever if you ever suspect the
+  daemon is serving stale data — e.g. a function shows zero callers in
+  the Symbol Insight panel but has obvious call sites in source.
+
+## [0.3.4] - 2026-05-17
+
+### Added
+- Per-symbol logging in the inlay-hints provider. Each render pass emits
+  one `[sym] line=… bareName=… sym.name=… ids=… resolved=…` line to the
+  `Gortex` Output channel so missing hints can be diagnosed in 30 seconds.
+
 ## [0.3.3] - 2026-05-17
 
 ### Changed

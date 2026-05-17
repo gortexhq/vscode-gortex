@@ -2,7 +2,7 @@
   "name": "gortex",
   "displayName": "Gortex",
   "description": "Code intelligence engine — graph-aware MCP tools for symbol search, call-chains, blast-radius, and structural edits.",
-  "version": "0.3.3",
+  "version": "0.3.5",
   "publisher": "gortexhq",
   "license": "MIT",
   "icon": "images/icon.png",
@@ -144,6 +144,11 @@
       {
         "command": "gortex.daemon.restart",
         "title": "Restart Daemon",
+        "category": "Gortex"
+      },
+      {
+        "command": "gortex.daemon.rebuildIndex",
+        "title": "Rebuild Index from Scratch",
         "category": "Gortex"
       },
       {

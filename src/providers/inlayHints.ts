@@ -66,13 +66,24 @@ export class GortexInlayHintsProvider implements vscode.InlayHintsProvider {
       const bareName = bareIdentifier(document, sym);
       const ids = candidateSymbolIds(repoRel, sym, bareName, document, ancestors);
 
-      // Try each candidate ID in order (most specific first). The daemon
-      // returns the symbol or undefined per id; first hit wins.
+      // Try each candidate ID in order (most specific first).
       let hit;
+      let resolvedId: string | undefined;
       for (const id of ids) {
         hit = await this.queries.getSymbol(id);
-        if (hit) break;
+        if (hit) { resolvedId = id; break; }
       }
+
+      // Per-symbol breadcrumb — gives us full visibility into the lookup so
+      // we can diagnose missing hints without guessing. Logs to the Gortex
+      // Output channel; harmless once the wiring is settled.
+      this.output.appendLine(
+        `  [sym] line=${sym.selectionRange.start.line + 1} ` +
+        `bareName="${bareName}" sym.name="${sym.name}" kind=${kindLabel(sym.kind)} ` +
+        `ancestors=[${ancestors.map(a => `${kindLabel(a.kind)}:${a.name}`).join(',')}] ` +
+        `ids=[${ids.join(' | ')}] resolved=${resolvedId ?? '∅'}`
+      );
+
       if (!hit) {
         unresolved++;
         return undefined;
@@ -111,5 +122,21 @@ export class GortexInlayHintsProvider implements vscode.InlayHintsProvider {
     );
 
     return hints.filter((h): h is vscode.InlayHint => !!h);
+  }
+}
+
+function kindLabel(k: vscode.SymbolKind): string {
+  // SymbolKind is a numeric enum; map the ones we actually emit so logs are
+  // readable instead of "kind=11".
+  switch (k) {
+    case vscode.SymbolKind.Function:    return 'function';
+    case vscode.SymbolKind.Method:      return 'method';
+    case vscode.SymbolKind.Constructor: return 'ctor';
+    case vscode.SymbolKind.Class:       return 'class';
+    case vscode.SymbolKind.Interface:   return 'interface';
+    case vscode.SymbolKind.Struct:      return 'struct';
+    case vscode.SymbolKind.Namespace:   return 'namespace';
+    case vscode.SymbolKind.Module:      return 'module';
+    default:                            return String(k);
   }
 }
