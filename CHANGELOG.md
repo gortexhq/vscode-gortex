@@ -5,6 +5,19 @@ All notable changes to **Gortex for VS Code** are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.2.1] - 2026-05-17
+
+Documentation pass. No behavior changes.
+
+- Made the **chord shortcuts** (`⌘K G/C/U/B`) much more explicit in the README
+  and the `Try the graph` walkthrough — including how to recognize VS Code's
+  "waiting for second key of chord…" indicator and a clear note that
+  `⇧⌘K` is VS Code's built-in *Delete Line* (which is easy to hit instead
+  of `⌘K`).
+- README now documents the v0.2.0 native integrations (`⌘T`, Call Hierarchy,
+  blast-radius webview) and the four opt-in provider settings.
+- README settings table updated with the new defaults and opt-in toggles.
+
 ## [0.2.0] - 2026-05-17
 
 The "first-class VS Code citizen" release. Gortex now plugs into VS Code's

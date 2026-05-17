@@ -42,7 +42,7 @@ VS Code → Extensions panel → search **Gortex** → Install.
 Or sideload a local build:
 
 ```sh
-code --install-extension gortex-0.1.1.vsix
+code --install-extension gortex-0.2.1.vsix
 ```
 
 ## What you get
@@ -63,19 +63,64 @@ A new **Gortex** icon in the activity bar opens two tree views:
   workspace.
 - **Daemon** — version, PID, uptime, memory, sessions, totals.
 
+### Native VS Code integrations (always on)
+
+Gortex plugs into VS Code's built-in surfaces, so you get graph-aware results
+through UI you already know:
+
+- **`⌘T` / `Ctrl+T`** — *Go to Symbol in Workspace* now searches Gortex's
+  BM25 index across **every tracked repo**, not just the open folder. Find a
+  symbol in any of your indexed repos with one shortcut.
+- **Call Hierarchy** — right-click any function → *Show Call Hierarchy* opens
+  VS Code's native panel, populated from Gortex's `get_callers` (incoming)
+  and `get_call_chain` (outgoing).
+- **Blast-radius webview** (`⌘K B`) — interactive panel grouped by ring depth,
+  click any node to navigate to the file.
+
+### Native integrations (opt-in)
+
+These shadow your language server, so they're **off by default** — turn each
+on individually:
+
+- **`gortex.references.enabled`** — `⇧F12` Find All References via
+  `find_usages` (zero false positives, cross-repo).
+- **`gortex.implementations.enabled`** — `⌘F12` Go to Implementations via
+  `find_implementations`.
+- **`gortex.hover.enabled`** — hover any symbol → "X callers · Y dependents ·
+  Z usages" with clickable links.
+- **`gortex.codeLens.enabled`** — inline "X callers · Y dependents" above
+  every function declaration.
+
 ### Commands (palette: `Gortex: …`)
 
-| Command | Default keybinding |
-|---|---|
-| Find Symbol… | `⌘K G` / `Ctrl+K G` |
-| Find Callers of Symbol Under Cursor | `⌘K C` / `Ctrl+K C` |
-| Find Usages of Symbol Under Cursor | `⌘K U` / `Ctrl+K U` |
-| Show Blast Radius of Symbol Under Cursor | `⌘K B` / `Ctrl+K B` |
-| Start / Stop / Restart Daemon | — |
-| Track / Untrack Current Workspace | — |
-| Show Daemon Status | — |
-| Show Daemon Logs | — |
-| Refresh Gortex Views | — |
+Every command is available via the Command Palette (`⌘⇧P` / `Ctrl+Shift+P`,
+then start typing `Gortex: …`). The most common four also have **chord**
+keyboard shortcuts:
+
+| Command | Default chord (Mac) | Default chord (Win/Linux) |
+|---|---|---|
+| Find Symbol… | `⌘K` then `G` | `Ctrl+K` then `G` |
+| Find Callers of Symbol Under Cursor | `⌘K` then `C` | `Ctrl+K` then `C` |
+| Find Usages of Symbol Under Cursor | `⌘K` then `U` | `Ctrl+K` then `U` |
+| Show Blast Radius (interactive webview) | `⌘K` then `B` | `Ctrl+K` then `B` |
+| Start / Stop / Restart Daemon | — | — |
+| Track / Untrack Current Workspace | — | — |
+| Show Daemon Status | — | — |
+| Show Daemon Logs | — | — |
+| Refresh Gortex Views | — | — |
+
+> **About chord shortcuts.** A chord is *two* keystrokes in sequence — not
+> pressed together. For `⌘K G`: hold `⌘` and tap `K`, release both, then
+> tap `G` on its own. VS Code shows
+> *"(⌘K) was pressed. Waiting for second key of chord…"* at the bottom of
+> the screen between the two presses — that's confirmation you got the
+> first half right. If you accidentally hit `⇧⌘K` instead of `⌘K`, VS Code
+> will delete the current line; that's a built-in shortcut, not us.
+>
+> Prefer non-chord shortcuts? Open `File → Preferences → Keyboard Shortcuts`,
+> search `gortex`, click the pencil next to the command, and press whatever
+> combo you want. The commands always work from the palette too — the chord
+> defaults are just a convenience.
 
 ### Settings
 
@@ -84,7 +129,11 @@ A new **Gortex** icon in the activity bar opens two tree views:
 | `gortex.binaryPath` | `gortex` | Path to the gortex executable. |
 | `gortex.autoTrackWorkspace` | `true` | Prompt to track newly opened folders. |
 | `gortex.statusBar.enabled` | `true` | Toggle the status bar item. |
-| `gortex.statusBar.refreshIntervalSec` | `15` | Daemon poll cadence. |
+| `gortex.statusBar.refreshIntervalSec` | `60` | Daemon poll cadence. Daemon-control commands also force an immediate refresh. |
+| `gortex.references.enabled` | `false` | Route `⇧F12` Find All References through Gortex (opt-in — shadows your language server). |
+| `gortex.implementations.enabled` | `false` | Route `⌘F12` Go to Implementations through Gortex (opt-in). |
+| `gortex.hover.enabled` | `false` | Show `X callers · Y dependents · Z usages` when hovering a symbol (opt-in). |
+| `gortex.codeLens.enabled` | `false` | Render `X callers · Y dependents` inline above every function declaration (opt-in — polarizing). |
 
 ## URL-handler install
 
