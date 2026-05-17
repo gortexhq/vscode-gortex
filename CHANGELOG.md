@@ -5,6 +5,23 @@ All notable changes to **Gortex for VS Code** are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.3.1] - 2026-05-17
+
+### Fixed
+- **Inlay hints missing on Go methods** (and any language whose LSP returns
+  qualified symbol names). Gopls emits `(*Handler).foo` as the symbol name;
+  passing that straight to `search_symbols` poisoned the BM25 ranking
+  ("Handler" matched 15+ unrelated symbols) and the in-file hit was rarely
+  in the top 5, so the provider silently failed for every method while plain
+  functions worked. Now reads the bare identifier from
+  `document.getText(selectionRange)` and falls back to the qualified name if
+  needed. Bumped per-symbol search limit from 5 to 25.
+
+### Added
+- Output channel logging on every inlay-hint pass. Format:
+  `[inlayHints] <path>: N rendered, M hidden (zero stats), K unresolved (of T targets)`
+  Open `View → Output → Gortex` to debug missing hints in 30 seconds.
+
 ## [0.3.0] - 2026-05-17
 
 The "ambient enrichment" release. Gortex data now shows up in the main UI

@@ -99,7 +99,7 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   // --- native providers ---
-  registerNativeProviders(context, queries, repos, mcpClient, metadata);
+  registerNativeProviders(context, queries, repos, mcpClient, metadata, output);
 
   // --- analyze-driven surfaces (need the cache running) ---
   if (cfg.gutterIconsEnabled || cfg.fileDecorationsEnabled || cfg.analyzeDiagnosticsEnabled) {
@@ -172,6 +172,7 @@ function registerNativeProviders(
   repos: RepoIndex,
   mcp: McpClient,
   metadata: MetadataCache,
+  output: vscode.OutputChannel,
 ): void {
   const cfg = readConfig();
   const selector: vscode.DocumentSelector = { scheme: 'file' };
@@ -218,7 +219,7 @@ function registerNativeProviders(
     context.subscriptions.push(
       vscode.languages.registerInlayHintsProvider(
         selector,
-        new GortexInlayHintsProvider(queries, metadata, repos),
+        new GortexInlayHintsProvider(queries, metadata, repos, output),
       ),
     );
   }

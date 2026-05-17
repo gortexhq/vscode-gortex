@@ -21,6 +21,7 @@ export class GortexInlayHintsProvider implements vscode.InlayHintsProvider {
     private readonly queries: GraphQueries,
     private readonly metadata: MetadataCache,
     private readonly repos: RepoIndex,
+    private readonly output: vscode.OutputChannel,
   ) {}
 
   refresh(): void {
@@ -33,13 +34,22 @@ export class GortexInlayHintsProvider implements vscode.InlayHintsProvider {
     token: vscode.CancellationToken,
   ): Promise<vscode.InlayHint[]> {
     const repoRel = this.repos.relativePath(document.uri);
-    if (!repoRel) return [];
+    if (!repoRel) {
+      this.output.appendLine(`[inlayHints] skip ${document.uri.fsPath} — not under any tracked repo`);
+      return [];
+    }
 
     const symbols = await vscode.commands.executeCommand<vscode.DocumentSymbol[]>(
       'vscode.executeDocumentSymbolProvider',
       document.uri,
     );
-    if (token.isCancellationRequested || !symbols) return [];
+    if (token.isCancellationRequested) return [];
+    if (!symbols || symbols.length === 0) {
+      this.output.appendLine(
+        `[inlayHints] no DocumentSymbols for ${document.uri.fsPath} — install/enable the language extension (e.g. golang.go for Go)`,
+      );
+      return [];
+    }
 
     const targets = flattenFunctions(symbols).filter(s =>
       range.contains(s.selectionRange.start) || range.contains(s.range.start),
@@ -47,26 +57,48 @@ export class GortexInlayHintsProvider implements vscode.InlayHintsProvider {
     if (targets.length === 0) return [];
 
     const limited = targets.slice(0, 60);
+    let resolved = 0, hiddenZero = 0, missed = 0;
+
     const hints = await Promise.all(limited.map(async sym => {
-      const hits = await this.queries.searchSymbols(sym.name, 5).catch(() => []);
-      const hit = hits.find(h => h.file_path === repoRel) ?? hits[0];
-      if (!hit) return undefined;
+      // gopls returns method names as qualified strings like "(*Handler).foo"
+      // which BM25 then tokenizes into noise that buries the real symbol.
+      // selectionRange points at the bare identifier in source, so reading
+      // the document text there gives us the unambiguous name.
+      const bareName = (() => {
+        try { return document.getText(sym.selectionRange).trim(); }
+        catch { return sym.name; }
+      })();
+      const queryName = bareName || sym.name;
+
+      // Two-pronged lookup: try the bare name first, then fall back to the
+      // qualified name with a wider limit if nothing in-file matched. This
+      // handles languages whose LSP gives the bare name as well as those
+      // (like gopls) that qualify methods.
+      const hit = await this.resolve(queryName, repoRel)
+        ?? (queryName !== sym.name ? await this.resolve(sym.name, repoRel) : undefined);
+
+      if (!hit) {
+        missed++;
+        return undefined;
+      }
+
       const stats = await this.metadata.stats(hit.id);
-      // Don't render zero-everything noise.
-      if (stats.callers + stats.dependents + stats.usages === 0) return undefined;
+      if (stats.callers + stats.dependents + stats.usages === 0) {
+        hiddenZero++;
+        return undefined;
+      }
+      resolved++;
 
       const parts: string[] = [];
       if (stats.callers > 0) parts.push(`${stats.callers}c`);
       if (stats.dependents > 0) parts.push(`${stats.dependents}d`);
       const label = `  ${parts.join(' · ')}`;
 
-      // Anchor at the end of the line that holds the declaration name, so the
-      // hint floats just past the signature.
       const lineEnd = document.lineAt(sym.selectionRange.start.line).range.end;
       const hint = new vscode.InlayHint(lineEnd, label, vscode.InlayHintKind.Type);
       hint.paddingLeft = true;
       hint.tooltip = new vscode.MarkdownString(
-        `**${sym.name}**\n\n` +
+        `**${bareName}**\n\n` +
         `- ${stats.callers} caller${stats.callers === 1 ? '' : 's'}\n` +
         `- ${stats.dependents} dependent${stats.dependents === 1 ? '' : 's'}\n` +
         `- ${stats.usages} usage${stats.usages === 1 ? '' : 's'}\n\n` +
@@ -78,7 +110,23 @@ export class GortexInlayHintsProvider implements vscode.InlayHintsProvider {
       return hint;
     }));
 
+    this.output.appendLine(
+      `[inlayHints] ${document.uri.fsPath}: ${resolved} rendered, ${hiddenZero} hidden (zero stats), ${missed} unresolved (of ${limited.length} targets)`,
+    );
+
     return hints.filter((h): h is vscode.InlayHint => !!h);
+  }
+
+  /**
+   * Look up a function/method name in the graph and prefer the hit that
+   * lives in the current file. Uses limit:25 because the daemon's BM25
+   * scoring sometimes returns nothing at limit:5 for names that share
+   * tokens with the rest of the corpus (`run`, `version`, etc.).
+   */
+  private async resolve(name: string, repoRel: string) {
+    const hits = await this.queries.searchSymbols(name, 25).catch(() => []);
+    if (hits.length === 0) return undefined;
+    return hits.find(h => h.file_path === repoRel) ?? hits[0];
   }
 }
 
