@@ -9,6 +9,24 @@ import { McpClient } from './mcpClient';
 export class GraphQueries {
   constructor(private readonly mcp: McpClient) {}
 
+  /**
+   * Exact lookup of a graph node by ID. Use when you can construct the ID
+   * locally (e.g. `repoRel::funcName` or `repoRel::Receiver.methodName`) —
+   * far more reliable than searching by name, which can return same-named
+   * symbols from anywhere in the workspace.
+   */
+  async getSymbol(id: string): Promise<SymbolHit | undefined> {
+    try {
+      const res = await this.mcp.callTool<SymbolHit | string>('get_symbol', { id });
+      // The daemon returns the raw string "symbol not found" for misses,
+      // which our unwrap step deserialises to a string. Treat that as a miss.
+      if (typeof res === 'string') return undefined;
+      return res;
+    } catch {
+      return undefined;
+    }
+  }
+
   async searchSymbols(query: string, limit = 25): Promise<SymbolHit[]> {
     const res = await this.mcp.callTool<SearchSymbolsResponse>('search_symbols', {
       query,

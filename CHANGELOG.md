@@ -5,6 +5,29 @@ All notable changes to **Gortex for VS Code** are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.3.3] - 2026-05-17
+
+### Changed
+- **Inlay hints + CodeLens now construct graph IDs directly** instead of
+  going through fuzzy `search_symbols`. We already have everything we need
+  locally — file path, bare identifier (from `selectionRange`), and receiver
+  type (parsed from the `func (recv *T)` line for Go, or taken from the
+  parent class/struct/interface DocumentSymbol for TS/Python/Java/Rust). So
+  we build the ID — `<repoRel>::<name>` or `<repoRel>::<Receiver>.<name>` —
+  and call `get_symbol(id)` directly. One ~1-2ms round trip per symbol.
+  Deterministic.
+- This eliminates an entire class of bugs that the previous search-based
+  approach had — wrong-attribution to same-named symbols in other repos,
+  flaky behavior on common short names like `Test`/`Run`/`init`, and the
+  whole BM25-limit-threshold tuning rabbit hole. The v0.3.1 and v0.3.2
+  patches were really attempts to make a wrong-tool-for-the-job (search)
+  behave; this replaces it with the right tool (direct lookup).
+
+### Added
+- `GraphQueries.getSymbol(id)` — single-shot lookup by graph ID.
+- `src/symbolId.ts` — shared `candidateSymbolIds()` and `walkFunctions()`
+  helpers consumed by both the inlay-hints and code-lens providers.
+
 ## [0.3.2] - 2026-05-17
 
 ### Fixed

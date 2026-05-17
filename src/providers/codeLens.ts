@@ -2,21 +2,23 @@ import * as vscode from 'vscode';
 import { McpClient } from '../mcpClient';
 import { GraphQueries } from '../query';
 import { RepoIndex } from '../repoIndex';
+import { candidateSymbolIds, walkFunctions, bareIdentifier } from '../symbolId';
 
 /**
  * Renders `12 callers · 84 dependents` above every function in the open file.
  * Off by default — polarizing. Enable via `gortex.codeLens.enabled`.
  *
- * Strategy: ask VS Code's existing DocumentSymbolProvider for the file's
- * functions/methods (zero re-implementation), then for each one fan out two
- * Gortex queries in parallel. Per-file results are cached and invalidated by
- * stale_refs notifications when the daemon publishes them.
+ * Uses direct ID construction (see symbolId.ts) instead of fuzzy search to
+ * avoid wrong-attribution: a fresh `Test()` method would otherwise inherit
+ * the stats of whatever popular `Test` function BM25 ranked first.
+ *
+ * Per-file results are cached; stale_refs notifications invalidate the cache
+ * when the daemon publishes them.
  */
 export class GortexCodeLensProvider implements vscode.CodeLensProvider {
   private readonly _onDidChange = new vscode.EventEmitter<void>();
   readonly onDidChangeCodeLenses = this._onDidChange.event;
 
-  /** Cached lens lists per document URI. */
   private cache = new Map<string, vscode.CodeLens[]>();
 
   constructor(
@@ -24,9 +26,6 @@ export class GortexCodeLensProvider implements vscode.CodeLensProvider {
     private readonly repos: RepoIndex,
     mcp: McpClient,
   ) {
-    // Re-render lenses whenever the daemon publishes a stale-refs event.
-    // The subscription Just Works once the daemon's publish path is wired up;
-    // until then this is dormant.
     void mcp.subscribe('stale_refs', () => {
       this.cache.clear();
       this._onDidChange.fire();
@@ -45,8 +44,8 @@ export class GortexCodeLensProvider implements vscode.CodeLensProvider {
     const cached = this.cache.get(document.uri.toString());
     if (cached) return cached;
 
-    const repoRelPath = this.repos.relativePath(document.uri);
-    if (!repoRelPath) return [];
+    const repoRel = this.repos.relativePath(document.uri);
+    if (!repoRel) return [];
 
     const symbols = await vscode.commands.executeCommand<vscode.DocumentSymbol[]>(
       'vscode.executeDocumentSymbolProvider',
@@ -54,32 +53,20 @@ export class GortexCodeLensProvider implements vscode.CodeLensProvider {
     );
     if (token.isCancellationRequested || !symbols) return [];
 
-    const targets = flattenFunctionLike(symbols);
-    if (targets.length === 0) return [];
+    const candidates = walkFunctions(symbols).slice(0, 40);
+    if (candidates.length === 0) return [];
 
-    // Limit fan-out to keep request volume reasonable on huge files.
-    const limited = targets.slice(0, 40);
-    const lenses = await Promise.all(limited.map(async sym => {
-      // Prefer the bare identifier (gopls qualifies methods as
-      // `(*Handler).foo` in sym.name, which poisons BM25). selectionRange
-      // is the identifier span.
-      const bareName = (() => {
-        try { return document.getText(sym.selectionRange).trim(); }
-        catch { return sym.name; }
-      })();
-      const queryName = bareName || sym.name;
-      const targetLine = sym.selectionRange.start.line + 1; // gortex is 1-based
+    const lenses = await Promise.all(candidates.map(async ({ sym, ancestors }) => {
+      const bareName = bareIdentifier(document, sym);
+      const ids = candidateSymbolIds(repoRel, sym, bareName, document, ancestors);
 
-      const hits = await this.queries.searchSymbols(queryName, 25).catch(() => []);
-      // Same-file + near-line match required. Without it, same-named symbols
-      // in other repos hijack the lens (e.g. every `Test` method shows the
-      // most popular test's caller count instead of its own).
-      const hit = hits.find(h =>
-        h.file_path === repoRelPath &&
-        typeof h.start_line === 'number' &&
-        Math.abs(h.start_line - targetLine) <= 10,
-      );
+      let hit;
+      for (const id of ids) {
+        hit = await this.queries.getSymbol(id);
+        if (hit) break;
+      }
       if (!hit) return undefined;
+
       const [callers, dependents] = await Promise.all([
         this.queries.callers(hit.id, 1, 200).catch(() => []),
         this.queries.dependents(hit.id, 2, 200).catch(() => []),
@@ -87,12 +74,11 @@ export class GortexCodeLensProvider implements vscode.CodeLensProvider {
       const range = new vscode.Range(sym.range.start, sym.range.start);
       const title = `$(call-incoming) ${callers.length} caller${callers.length === 1 ? '' : 's'}` +
                     ` · $(symbol-misc) ${dependents.length} dependent${dependents.length === 1 ? '' : 's'}`;
-      const lens = new vscode.CodeLens(range, {
+      return new vscode.CodeLens(range, {
         title,
         command: 'vscode.executeReferenceProvider',
         arguments: [document.uri, sym.range.start],
       });
-      return lens;
     }));
     const filtered = lenses.filter((x): x is vscode.CodeLens => !!x);
     this.cache.set(document.uri.toString(), filtered);
@@ -102,18 +88,4 @@ export class GortexCodeLensProvider implements vscode.CodeLensProvider {
   dispose(): void {
     this._onDidChange.dispose();
   }
-}
-
-function flattenFunctionLike(symbols: vscode.DocumentSymbol[]): vscode.DocumentSymbol[] {
-  const out: vscode.DocumentSymbol[] = [];
-  const walk = (sym: vscode.DocumentSymbol) => {
-    if (sym.kind === vscode.SymbolKind.Function ||
-        sym.kind === vscode.SymbolKind.Method ||
-        sym.kind === vscode.SymbolKind.Constructor) {
-      out.push(sym);
-    }
-    for (const child of sym.children ?? []) walk(child);
-  };
-  for (const s of symbols) walk(s);
-  return out;
 }
