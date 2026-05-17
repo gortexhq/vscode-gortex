@@ -44,4 +44,22 @@ export class RepoIndex {
     if (folder) return vscode.Uri.joinPath(folder.uri, filePath);
     return undefined;
   }
+
+  /**
+   * Reverse of `resolve`: given a local URI, return the daemon-style
+   * `<repo_prefix>/<relative/path>` if the URI is inside a tracked repo. Used
+   * by providers that need to disambiguate hits in the current file from
+   * same-named symbols elsewhere.
+   */
+  relativePath(uri: vscode.Uri): string | undefined {
+    const fsPath = uri.fsPath;
+    for (const repo of this.byPrefix.values()) {
+      if (fsPath === repo.path) return repo.name;
+      const prefix = repo.path.endsWith('/') ? repo.path : repo.path + '/';
+      if (fsPath.startsWith(prefix)) {
+        return `${repo.name}/${fsPath.slice(prefix.length)}`;
+      }
+    }
+    return undefined;
+  }
 }

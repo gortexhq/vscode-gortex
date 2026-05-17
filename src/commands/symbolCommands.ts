@@ -1,18 +1,50 @@
 import * as vscode from 'vscode';
 import { GraphQueries, GraphNode, SymbolHit } from '../query';
 import { RepoIndex } from '../repoIndex';
+import { BlastRadiusWebview } from '../views/blastRadiusWebview';
 
 export function registerSymbolCommands(
   context: vscode.ExtensionContext,
   queries: GraphQueries,
   repos: RepoIndex,
+  blastRadius: BlastRadiusWebview,
 ): void {
   context.subscriptions.push(
     vscode.commands.registerCommand('gortex.symbol.find', () => findSymbol(queries, repos)),
     vscode.commands.registerCommand('gortex.symbol.callers', () => graphFromCursor(queries, repos, 'callers')),
     vscode.commands.registerCommand('gortex.symbol.usages', () => graphFromCursor(queries, repos, 'usages')),
-    vscode.commands.registerCommand('gortex.symbol.blastRadius', () => graphFromCursor(queries, repos, 'dependents')),
+    vscode.commands.registerCommand('gortex.symbol.blastRadius', () => showBlastRadius(queries, repos, blastRadius)),
   );
+}
+
+async function showBlastRadius(
+  queries: GraphQueries,
+  repos: RepoIndex,
+  webview: BlastRadiusWebview,
+): Promise<void> {
+  const editor = vscode.window.activeTextEditor;
+  if (!editor) {
+    vscode.window.showWarningMessage('Open a file and place the cursor on a symbol first.');
+    return;
+  }
+  const word = wordAtCursor(editor);
+  if (!word) {
+    vscode.window.showWarningMessage('No symbol under cursor.');
+    return;
+  }
+  const candidates = await withProgress(`Gortex: resolving "${word}"…`, () =>
+    queries.searchSymbols(word, 25),
+  );
+  if (candidates.length === 0) {
+    vscode.window.showInformationMessage(`No graph node found for "${word}".`);
+    return;
+  }
+  const repoRel = repos.relativePath(editor.document.uri);
+  const symbol = candidates.find(h => repoRel && h.file_path === repoRel) ?? candidates[0];
+  const nodes = await withProgress(`Gortex: blast radius of ${symbol.name}…`, () =>
+    queries.dependents(symbol.id, 3, 200),
+  );
+  webview.show(symbol.name, symbol as GraphNode, nodes);
 }
 
 async function findSymbol(queries: GraphQueries, repos: RepoIndex): Promise<void> {

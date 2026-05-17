@@ -2,7 +2,7 @@
   "name": "gortex",
   "displayName": "Gortex",
   "description": "Code intelligence engine — graph-aware MCP tools for symbol search, call-chains, blast-radius, and structural edits.",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "publisher": "gortexhq",
   "license": "MIT",
   "icon": "images/icon.png",
@@ -65,6 +65,26 @@
           "minimum": 3,
           "maximum": 600,
           "description": "How often the status bar polls 'gortex daemon status', in seconds. Daemon control commands trigger an immediate refresh regardless."
+        },
+        "gortex.references.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Use Gortex for 'Find All References' (⇧F12). Off by default — your language server may already provide this."
+        },
+        "gortex.implementations.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Use Gortex for 'Go to Implementations' (⌘F12). Off by default — your language server may already provide this."
+        },
+        "gortex.hover.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show 'X callers · Y dependents · Z usages' when hovering a symbol. Off by default to avoid clashing with language-server hovers."
+        },
+        "gortex.codeLens.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Render 'X callers · Y dependents' inline above every function declaration. Off by default — polarizing visual noise."
         }
       }
     },

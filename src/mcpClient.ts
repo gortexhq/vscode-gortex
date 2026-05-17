@@ -7,8 +7,9 @@ import { readConfig } from './config';
  * the long-lived daemon — by holding one connection open we avoid the multi-
  * second re-index cost of every `gortex query` CLI invocation.
  *
- * Protocol: newline-delimited JSON-RPC 2.0. We only need `initialize`,
- * `notifications/initialized`, and `tools/call`.
+ * Protocol: newline-delimited JSON-RPC 2.0. We use `initialize`, `tools/call`,
+ * and JSON-RPC notifications (id-less messages) for the daemon's push streams
+ * — daemon_health, workspace_readiness, stale_refs, diagnostics.
  */
 export class McpClient implements vscode.Disposable {
   private proc: ChildProcessWithoutNullStreams | undefined;
@@ -17,6 +18,9 @@ export class McpClient implements vscode.Disposable {
   private buf = '';
   private readyPromise: Promise<void> | undefined;
   private restartingAt = 0;
+
+  private readonly notificationListeners = new Map<string, Set<NotificationListener>>();
+  private readonly activeSubscriptions = new Set<string>();
 
   constructor(private readonly output: vscode.OutputChannel) {}
 
@@ -40,12 +44,13 @@ export class McpClient implements vscode.Disposable {
       this.failAllPending(new Error(`gortex mcp exited with code ${code}`));
       this.proc = undefined;
       this.readyPromise = undefined;
+      this.activeSubscriptions.clear();
     });
 
     return this.request('initialize', {
       protocolVersion: '2025-03-26',
-      capabilities: {},
-      clientInfo: { name: 'vscode-gortex', version: '0.1.0' },
+      capabilities: { resources: { subscribe: true } },
+      clientInfo: { name: 'vscode-gortex', version: '0.2.0' },
     }).then(() => {
       this.send({ jsonrpc: '2.0', method: 'notifications/initialized' });
     });
@@ -66,6 +71,55 @@ export class McpClient implements vscode.Disposable {
     } catch {
       return text as unknown as T;
     }
+  }
+
+  /**
+   * Subscribe to a server-pushed notification topic. Returns a Disposable that
+   * removes the listener. The first subscriber on a topic also calls the
+   * matching `subscribe_<topic>` tool on the daemon; the last one to remove
+   * calls `unsubscribe_<topic>`.
+   *
+   * Topics: 'daemon_health', 'workspace_readiness', 'stale_refs',
+   * 'diagnostics'. The protocol method name is `notifications/<topic>`.
+   */
+  async subscribe(
+    topic: NotificationTopic,
+    listener: NotificationListener,
+    subscribeArgs: Record<string, unknown> = {},
+  ): Promise<vscode.Disposable> {
+    const method = `notifications/${topic}`;
+    let listeners = this.notificationListeners.get(method);
+    if (!listeners) {
+      listeners = new Set();
+      this.notificationListeners.set(method, listeners);
+    }
+    listeners.add(listener);
+
+    // Server-side subscribe on first listener.
+    if (!this.activeSubscriptions.has(topic)) {
+      try {
+        await this.callTool(`subscribe_${topic}`, subscribeArgs);
+        this.activeSubscriptions.add(topic);
+      } catch (err) {
+        listeners.delete(listener);
+        if (listeners.size === 0) this.notificationListeners.delete(method);
+        throw err;
+      }
+    }
+
+    return new vscode.Disposable(() => {
+      const set = this.notificationListeners.get(method);
+      if (!set) return;
+      set.delete(listener);
+      if (set.size === 0) {
+        this.notificationListeners.delete(method);
+        if (this.activeSubscriptions.delete(topic)) {
+          // Fire-and-forget — the server is idempotent and we don't want to
+          // wait inside a dispose handler.
+          this.callTool(`unsubscribe_${topic}`, {}).catch(() => undefined);
+        }
+      }
+    });
   }
 
   private request(method: string, params: unknown): Promise<unknown> {
@@ -104,21 +158,33 @@ export class McpClient implements vscode.Disposable {
       const line = this.buf.slice(0, nl).trim();
       this.buf = this.buf.slice(nl + 1);
       if (!line) continue;
-      let msg;
+      let msg: JsonRpcMessage;
       try {
-        msg = JSON.parse(line);
+        msg = JSON.parse(line) as JsonRpcMessage;
       } catch {
         // Non-JSON lines (e.g. log preamble) — ignore.
         continue;
       }
-      if (msg.id !== undefined && this.pending.has(msg.id)) {
-        const handler = this.pending.get(msg.id)!;
-        this.pending.delete(msg.id);
+      if (msg.id !== undefined && this.pending.has(msg.id as number)) {
+        const handler = this.pending.get(msg.id as number)!;
+        this.pending.delete(msg.id as number);
         if (msg.error) handler.reject(new Error(msg.error.message ?? 'MCP error'));
         else handler.resolve(msg.result);
+      } else if (msg.method && msg.method.startsWith('notifications/')) {
+        this.dispatchNotification(msg.method, msg.params);
       }
-      // Notifications (no id) are currently ignored — wire subscription
-      // handlers here when v0.2 adds subscribe_daemon_health.
+    }
+  }
+
+  private dispatchNotification(method: string, params: unknown): void {
+    const listeners = this.notificationListeners.get(method);
+    if (!listeners) return;
+    for (const fn of listeners) {
+      try {
+        fn(params);
+      } catch (err) {
+        this.output.appendLine(`subscription handler error (${method}): ${(err as Error).message}`);
+      }
     }
   }
 
@@ -129,6 +195,8 @@ export class McpClient implements vscode.Disposable {
 
   dispose(): void {
     this.failAllPending(new Error('MCP client disposed'));
+    this.notificationListeners.clear();
+    this.activeSubscriptions.clear();
     if (this.proc && !this.proc.killed) {
       try { this.proc.kill(); } catch { /* ignore */ }
     }
@@ -137,7 +205,23 @@ export class McpClient implements vscode.Disposable {
   }
 }
 
+export type NotificationTopic =
+  | 'daemon_health'
+  | 'workspace_readiness'
+  | 'stale_refs'
+  | 'diagnostics';
+
+export type NotificationListener = (params: unknown) => void;
+
 interface ToolResponse {
   content?: Array<{ type?: string; text?: string }>;
   isError?: boolean;
+}
+
+interface JsonRpcMessage {
+  id?: number | string;
+  method?: string;
+  params?: unknown;
+  result?: unknown;
+  error?: { code?: number; message?: string };
 }

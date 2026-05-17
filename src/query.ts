@@ -31,6 +31,24 @@ export class GraphQueries {
     const res = await this.mcp.callTool<GraphResponse>('get_dependents', { id, depth, limit });
     return excludeSelf(res.nodes ?? [], id);
   }
+
+  /** Outgoing call graph (what this function calls, transitively). */
+  async callChain(id: string, depth = 2, limit = 50): Promise<GraphNode[]> {
+    const res = await this.mcp.callTool<GraphResponse>('get_call_chain', { id, depth, limit });
+    return excludeSelf(res.nodes ?? [], id);
+  }
+
+  /** Upstream dependencies (what this symbol depends on). */
+  async dependencies(id: string, depth = 2, limit = 50): Promise<GraphNode[]> {
+    const res = await this.mcp.callTool<GraphResponse>('get_dependencies', { id, depth, limit });
+    return excludeSelf(res.nodes ?? [], id);
+  }
+
+  /** Implementations of an interface. */
+  async implementations(id: string): Promise<GraphNode[]> {
+    const res = await this.mcp.callTool<GraphResponse>('find_implementations', { id });
+    return excludeSelf(res.nodes ?? [], id);
+  }
 }
 
 export interface SymbolHit {
