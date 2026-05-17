@@ -9,6 +9,14 @@ export interface GortexConfig {
   implementationsEnabled: boolean;
   hoverEnabled: boolean;
   codeLensEnabled: boolean;
+  inlayHintsEnabled: boolean;
+  occurrencesEnabled: boolean;
+  gutterIconsEnabled: boolean;
+  fileDecorationsEnabled: boolean;
+  cursorStatusBarEnabled: boolean;
+  symbolInsightEnabled: boolean;
+  analyzeDiagnosticsEnabled: boolean;
+  analyzeRefreshMinutes: number;
 }
 
 export function readConfig(): GortexConfig {
@@ -22,5 +30,13 @@ export function readConfig(): GortexConfig {
     implementationsEnabled: c.get<boolean>('implementations.enabled') ?? false,
     hoverEnabled: c.get<boolean>('hover.enabled') ?? false,
     codeLensEnabled: c.get<boolean>('codeLens.enabled') ?? false,
+    inlayHintsEnabled: c.get<boolean>('inlayHints.enabled') ?? true,
+    occurrencesEnabled: c.get<boolean>('occurrences.enabled') ?? true,
+    gutterIconsEnabled: c.get<boolean>('gutterIcons.enabled') ?? true,
+    fileDecorationsEnabled: c.get<boolean>('fileDecorations.enabled') ?? true,
+    cursorStatusBarEnabled: c.get<boolean>('cursorStatusBar.enabled') ?? true,
+    symbolInsightEnabled: c.get<boolean>('symbolInsight.enabled') ?? true,
+    analyzeDiagnosticsEnabled: c.get<boolean>('analyzeDiagnostics.enabled') ?? false,
+    analyzeRefreshMinutes: c.get<number>('analyze.refreshIntervalMinutes') ?? 5,
   };
 }

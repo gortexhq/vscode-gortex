@@ -5,6 +5,68 @@ All notable changes to **Gortex for VS Code** are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] - 2026-05-17
+
+The "ambient enrichment" release. Gortex data now shows up in the main UI
+without anyone running a command — graph-aware information at the points in
+VS Code where users already look.
+
+### Added — passive editor enrichment
+
+- **Inlay hints** (default on). Faint `Nc · Md` after every function
+  declaration line (caller / dependent counts). Zero vertical space cost.
+  `gortex.inlayHints.enabled`.
+- **Live occurrence underlines** (default on). When the cursor lands on a
+  symbol, every occurrence **across the workspace** gets a subtle
+  underline — backed by `find_usages`. VS Code's built-in highlight only
+  spans the open file. `gortex.occurrences.enabled`.
+- **Gutter icons** (default on). 🔥 for hotspots, 💀 for dead-code
+  candidates, driven by `analyze hotspots` / `analyze dead_code`. Tooltip
+  carries fan-in and complexity. `gortex.gutterIcons.enabled`.
+
+### Added — workspace-level enrichment
+
+- **File-tree + tab decorations** (default on). Color tint and small badge
+  on every file in the Explorer (and on tab labels) based on hotspot
+  density and dead-symbol count. Hover for stats. Dead-only files greyed.
+  `gortex.fileDecorations.enabled`.
+- **Cursor-context status bar** (default on). A second status-bar item
+  shows `name · 12c · 28d · 3u` for the symbol under the cursor. Click to
+  open symbol search. `gortex.cursorStatusBar.enabled`.
+
+### Added — Symbol Insight panel
+
+- **Third tree view** in the Gortex activity bar (default on). Updates as
+  the cursor moves. Four sections: *Callers · Usages · Blast radius ·
+  Implementations.* No commands, no chords — just look at the panel after
+  moving the cursor and the answer is there. `gortex.symbolInsight.enabled`.
+
+### Added — Problems-panel insights
+
+- **Analyze diagnostics** (default off — opt in). Dead code (Hint
+  severity, struck through), hotspots > 50 fan-in (Info), and dependency
+  cycles (Info) appear in the Problems panel. `gortex.analyzeDiagnostics.enabled`,
+  `gortex.analyze.refreshIntervalMinutes` (default 5).
+
+### Foundations
+
+- **`MetadataCache`** — per-symbol caller/dependent/usage counts with TTL
+  and stale_refs invalidation. One source of truth for inlay hints, hover,
+  code lens, and the cursor status bar.
+- **`AnalyzeCache`** — workspace-wide hot/dead/cycle sets, refreshed on a
+  slow timer. Drives gutter icons, file decorations, and Problems panel.
+- **`ActiveSymbolTracker`** — debounced cursor → resolved symbol mapping
+  with cancellation. Drives occurrences, status bar, and Symbol Insight.
+
+### Notes
+
+- All new surfaces are **on by default** except `analyzeDiagnostics`
+  (potentially noisy in large workspaces). Toggle anything off in
+  Settings → Gortex.
+- Inlay hints and occurrence underlines depend on the daemon-backed query
+  layer added in v0.1.1 — a fresh ~30-100ms per request, far below
+  perceptible.
+
 ## [0.2.1] - 2026-05-17
 
 Documentation pass. No behavior changes.

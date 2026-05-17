@@ -42,7 +42,7 @@ VS Code → Extensions panel → search **Gortex** → Install.
 Or sideload a local build:
 
 ```sh
-code --install-extension gortex-0.2.1.vsix
+code --install-extension gortex-0.3.0.vsix
 ```
 
 ## What you get
@@ -90,6 +90,32 @@ on individually:
   Z usages" with clickable links.
 - **`gortex.codeLens.enabled`** — inline "X callers · Y dependents" above
   every function declaration.
+
+### Ambient enrichment (on by default)
+
+Graph-aware information shows up where you're already looking — no commands
+required:
+
+- **Inlay hints** — faint `12c · 28d` after every function declaration.
+- **Symbol Insight panel** — third tree view in the Gortex sidebar that
+  updates with the cursor. Live Callers / Usages / Blast radius /
+  Implementations for whatever you're looking at.
+- **Cursor status bar** — second status-bar item showing the symbol under
+  the cursor and its counts.
+- **Occurrence underlines** — cursor lands on a symbol → every occurrence
+  **across the workspace** gets a subtle underline (built-in only covers
+  the open file).
+- **Gutter icons** — 🔥 next to hotspots, 💀 next to dead-code candidates.
+- **File-tree + tab decorations** — color tint and badge per file based on
+  hotspot density.
+
+Turn any of these off in Settings → Gortex if they're too noisy for your
+workflow.
+
+### Problems-panel insights (opt-in)
+
+Enable `gortex.analyzeDiagnostics.enabled` to surface dead code, hotspots,
+and dependency cycles as info-level diagnostics in the Problems panel.
 
 ### Commands (palette: `Gortex: …`)
 

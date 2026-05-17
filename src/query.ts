@@ -49,6 +49,15 @@ export class GraphQueries {
     const res = await this.mcp.callTool<GraphResponse>('find_implementations', { id });
     return excludeSelf(res.nodes ?? [], id);
   }
+
+  /**
+   * Unified analyzer dispatch. The return shape is kind-specific — callers
+   * should know which key to read (e.g. `{hotspots: [...]}`, `{dead_code:
+   * [...]}`, `{cycles: [...]}`).
+   */
+  async analyze<T = unknown>(kind: string, args: Record<string, unknown> = {}): Promise<T> {
+    return this.mcp.callTool<T>('analyze', { kind, ...args });
+  }
 }
 
 export interface SymbolHit {

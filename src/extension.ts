@@ -4,10 +4,16 @@ import { GortexMcpProvider } from './mcp';
 import { McpClient } from './mcpClient';
 import { GraphQueries } from './query';
 import { RepoIndex } from './repoIndex';
+import { MetadataCache, AnalyzeCache } from './metadata';
+import { ActiveSymbolTracker } from './activeSymbol';
 import { StatusBar } from './statusBar';
+import { CursorStatusBar } from './cursorStatusBar';
 import { TrackedReposProvider } from './views/trackedRepos';
 import { DaemonInfoProvider } from './views/daemonInfo';
+import { SymbolInsightProvider } from './views/symbolInsight';
 import { BlastRadiusWebview } from './views/blastRadiusWebview';
+import { OccurrenceDecorations } from './decorations/occurrences';
+import { GutterDecorations } from './decorations/gutter';
 import { registerDaemonCommands } from './commands/daemonCommands';
 import { registerWorkspaceCommands } from './commands/workspaceCommands';
 import { registerSymbolCommands } from './commands/symbolCommands';
@@ -17,84 +23,137 @@ import { GortexCallHierarchyProvider } from './providers/callHierarchy';
 import { GortexReferenceProvider, GortexImplementationProvider } from './providers/references';
 import { GortexHoverProvider } from './providers/hover';
 import { GortexCodeLensProvider } from './providers/codeLens';
+import { GortexInlayHintsProvider } from './providers/inlayHints';
+import { GortexFileDecorations } from './providers/fileDecorations';
 import { GortexDiagnostics } from './providers/diagnostics';
+import { AnalyzeDiagnostics } from './providers/analyzeDiagnostics';
 import { readConfig } from './config';
 
 export function activate(context: vscode.ExtensionContext): void {
   const output = vscode.window.createOutputChannel('Gortex');
   context.subscriptions.push(output);
 
+  // --- core ---
   const cli = new GortexCli(output);
   const mcpClient = new McpClient(output);
   const queries = new GraphQueries(mcpClient);
   const repos = new RepoIndex();
-  context.subscriptions.push(mcpClient);
+  const metadata = new MetadataCache(queries, mcpClient);
+  const analyze = new AnalyzeCache(queries);
+  context.subscriptions.push(mcpClient, metadata, analyze);
 
+  // --- MCP server registration (for Copilot Chat) ---
   const mcpProvider = new GortexMcpProvider();
   context.subscriptions.push(
     vscode.lm.registerMcpServerDefinitionProvider('gortex', mcpProvider),
   );
 
+  // --- status bar (daemon health) + tree views ---
   const statusBar = new StatusBar(cli);
-  context.subscriptions.push(statusBar);
-
   const reposProvider = new TrackedReposProvider();
   const daemonProvider = new DaemonInfoProvider();
   context.subscriptions.push(
+    statusBar,
     vscode.window.registerTreeDataProvider('gortex.tracked', reposProvider),
     vscode.window.registerTreeDataProvider('gortex.daemon', daemonProvider),
   );
-
   statusBar.onDidUpdate(status => {
     reposProvider.setStatus(status);
     daemonProvider.setStatus(status);
     repos.update(status);
   });
 
-  const blastRadius = new BlastRadiusWebview(context, repos);
+  // --- cursor-driven surfaces ---
+  const activeTracker = new ActiveSymbolTracker(queries, repos);
+  context.subscriptions.push(activeTracker);
 
+  const cfg = readConfig();
+
+  if (cfg.symbolInsightEnabled) {
+    const insight = new SymbolInsightProvider(activeTracker, queries, repos);
+    context.subscriptions.push(
+      vscode.window.registerTreeDataProvider('gortex.insight', insight),
+    );
+  }
+
+  if (cfg.cursorStatusBarEnabled) {
+    context.subscriptions.push(new CursorStatusBar(activeTracker, metadata));
+  }
+
+  if (cfg.occurrencesEnabled) {
+    context.subscriptions.push(new OccurrenceDecorations(activeTracker, queries, repos));
+  }
+
+  // --- commands ---
+  const blastRadius = new BlastRadiusWebview(context, repos);
   registerDaemonCommands(context, cli, output, statusBar);
   registerWorkspaceCommands(context, cli, statusBar);
   registerSymbolCommands(context, queries, repos, blastRadius);
   registerRepoCommands(context);
-
   context.subscriptions.push(
-    vscode.commands.registerCommand('gortex.views.refresh', () => statusBar.refresh()),
+    vscode.commands.registerCommand('gortex.views.refresh', () => {
+      statusBar.refresh();
+      void analyze.refresh();
+    }),
+    vscode.commands.registerCommand('gortex.analyze.refresh', () => void analyze.refresh()),
   );
 
-  // Native providers — these wire Gortex into VS Code's built-in surfaces
-  // (Cmd+T, Call Hierarchy view, Shift+F12, etc.) so users get graph results
-  // through familiar UI without learning anything new.
-  registerNativeProviders(context, queries, repos, mcpClient);
+  // --- native providers ---
+  registerNativeProviders(context, queries, repos, mcpClient, metadata);
 
-  // Diagnostics from the daemon's push stream (dormant until daemon publishes).
+  // --- analyze-driven surfaces (need the cache running) ---
+  if (cfg.gutterIconsEnabled || cfg.fileDecorationsEnabled || cfg.analyzeDiagnosticsEnabled) {
+    analyze.start(cfg.analyzeRefreshMinutes * 60_000);
+  }
+  if (cfg.gutterIconsEnabled) {
+    context.subscriptions.push(new GutterDecorations(analyze, repos, context.extensionPath));
+  }
+  if (cfg.fileDecorationsEnabled) {
+    const fileDecos = new GortexFileDecorations(analyze, repos);
+    context.subscriptions.push(
+      fileDecos,
+      vscode.window.registerFileDecorationProvider(fileDecos),
+    );
+  }
+  if (cfg.analyzeDiagnosticsEnabled) {
+    context.subscriptions.push(new AnalyzeDiagnostics(analyze, repos));
+  }
+
+  // --- daemon diagnostics (dormant until daemon publishes) ---
   const diagnostics = new GortexDiagnostics(mcpClient, output);
   context.subscriptions.push(diagnostics);
   void diagnostics.start();
 
+  // --- settings reactivity ---
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration(e => {
-      if (e.affectsConfiguration('gortex.statusBar')) {
-        statusBar.applyVisibility();
-      }
+      if (e.affectsConfiguration('gortex.statusBar')) statusBar.applyVisibility();
       if (e.affectsConfiguration('gortex.binaryPath')) {
         mcpProvider.refresh();
         statusBar.refresh();
       }
-      // Provider toggles require a window reload to take full effect — but
-      // we re-register what we can on the fly.
-      if (
-        e.affectsConfiguration('gortex.references.enabled') ||
-        e.affectsConfiguration('gortex.implementations.enabled') ||
-        e.affectsConfiguration('gortex.hover.enabled') ||
-        e.affectsConfiguration('gortex.codeLens.enabled')
-      ) {
-        vscode.window.showInformationMessage(
-          'Gortex: reload the window for provider settings to take effect.',
-          'Reload',
-        ).then(pick => {
-          if (pick === 'Reload') vscode.commands.executeCommand('workbench.action.reloadWindow');
-        });
+      if (e.affectsConfiguration('gortex')) {
+        const needsReload = [
+          'gortex.references.enabled',
+          'gortex.implementations.enabled',
+          'gortex.hover.enabled',
+          'gortex.codeLens.enabled',
+          'gortex.inlayHints.enabled',
+          'gortex.occurrences.enabled',
+          'gortex.gutterIcons.enabled',
+          'gortex.fileDecorations.enabled',
+          'gortex.cursorStatusBar.enabled',
+          'gortex.symbolInsight.enabled',
+          'gortex.analyzeDiagnostics.enabled',
+        ].some(k => e.affectsConfiguration(k));
+        if (needsReload) {
+          vscode.window.showInformationMessage(
+            'Gortex: reload the window for surface toggles to take effect.',
+            'Reload',
+          ).then(pick => {
+            if (pick === 'Reload') vscode.commands.executeCommand('workbench.action.reloadWindow');
+          });
+        }
       }
     }),
   );
@@ -104,20 +163,15 @@ export function activate(context: vscode.ExtensionContext): void {
 }
 
 export function deactivate(): void {
-  // Every disposable is registered on the context; nothing else to clean up.
+  // Disposables are owned by the context; nothing else to do.
 }
 
-/**
- * Native VS Code provider registrations. WorkspaceSymbol + CallHierarchy are
- * always on (they're additive — VS Code merges results from every registered
- * provider). The rest are gated on `gortex.<provider>.enabled` because they
- * shadow built-in behavior some users rely on.
- */
 function registerNativeProviders(
   context: vscode.ExtensionContext,
   queries: GraphQueries,
   repos: RepoIndex,
   mcp: McpClient,
+  metadata: MetadataCache,
 ): void {
   const cfg = readConfig();
   const selector: vscode.DocumentSelector = { scheme: 'file' };
@@ -160,13 +214,16 @@ function registerNativeProviders(
       lens,
     );
   }
+  if (cfg.inlayHintsEnabled) {
+    context.subscriptions.push(
+      vscode.languages.registerInlayHintsProvider(
+        selector,
+        new GortexInlayHintsProvider(queries, metadata, repos),
+      ),
+    );
+  }
 }
 
-/**
- * If the user has `autoTrackWorkspace` on and the daemon isn't already tracking
- * the current folder, surface a one-shot prompt. We never auto-track silently —
- * the user always gets to say yes.
- */
 async function maybeOfferAutoTrack(cli: GortexCli, statusBar: StatusBar): Promise<void> {
   if (!readConfig().autoTrackWorkspace) return;
   const folder = vscode.workspace.workspaceFolders?.[0];

@@ -2,7 +2,7 @@
   "name": "gortex",
   "displayName": "Gortex",
   "description": "Code intelligence engine — graph-aware MCP tools for symbol search, call-chains, blast-radius, and structural edits.",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "publisher": "gortexhq",
   "license": "MIT",
   "icon": "images/icon.png",
@@ -85,6 +85,48 @@
           "type": "boolean",
           "default": false,
           "description": "Render 'X callers · Y dependents' inline above every function declaration. Off by default — polarizing visual noise."
+        },
+        "gortex.inlayHints.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show '  Nc · Md' inline after function declarations (caller/dependent counts). Takes zero vertical space."
+        },
+        "gortex.occurrences.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "When the cursor is on a symbol, faintly underline every occurrence across the workspace (cross-file). Built-in highlight only spans the open file."
+        },
+        "gortex.gutterIcons.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show 🔥 (hotspot) and 💀 (dead code) icons in the editor gutter, driven by `analyze hotspots` / `analyze dead_code`."
+        },
+        "gortex.fileDecorations.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Color-tint files in the Explorer + tab bar based on hotspot density and dead-symbol count."
+        },
+        "gortex.cursorStatusBar.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show a second status-bar item with the symbol under the cursor and its caller / dependent / usage counts."
+        },
+        "gortex.symbolInsight.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Add a 'Symbol Insight' tree view to the Gortex side panel — live callers / usages / dependents / implementations for whatever the cursor is on."
+        },
+        "gortex.analyzeDiagnostics.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Surface dead code, hotspots, and dependency cycles as info-level diagnostics in the Problems panel. Off by default — large workspaces can be noisy."
+        },
+        "gortex.analyze.refreshIntervalMinutes": {
+          "type": "number",
+          "default": 5,
+          "minimum": 1,
+          "maximum": 60,
+          "description": "How often to re-run `analyze` for hotspots / dead code / cycles. These don't change moment-to-moment, so the default is conservative."
         }
       }
     },
@@ -221,6 +263,10 @@
     },
     "views": {
       "gortex": [
+        {
+          "id": "gortex.insight",
+          "name": "Symbol Insight"
+        },
         {
           "id": "gortex.tracked",
           "name": "Tracked Repositories"
