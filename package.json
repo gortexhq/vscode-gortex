@@ -1,0 +1,272 @@
+{
+  "name": "gortex",
+  "displayName": "Gortex",
+  "description": "Code intelligence engine — graph-aware MCP tools for symbol search, call-chains, blast-radius, and structural edits.",
+  "version": "0.1.0",
+  "publisher": "gortexhq",
+  "license": "MIT",
+  "icon": "images/icon.png",
+  "engines": {
+    "vscode": "^1.99.0"
+  },
+  "categories": [
+    "AI",
+    "Other"
+  ],
+  "keywords": [
+    "mcp",
+    "model context protocol",
+    "code intelligence",
+    "knowledge graph",
+    "agent",
+    "copilot"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gortexhq/vscode-gortex.git"
+  },
+  "homepage": "https://gortex.dev",
+  "bugs": {
+    "url": "https://github.com/gortexhq/vscode-gortex/issues"
+  },
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onStartupFinished",
+    "onMcpServerCollection:gortex"
+  ],
+  "contributes": {
+    "mcpServerDefinitionProviders": [
+      {
+        "id": "gortex",
+        "label": "Gortex"
+      }
+    ],
+    "configuration": {
+      "title": "Gortex",
+      "properties": {
+        "gortex.binaryPath": {
+          "type": "string",
+          "default": "gortex",
+          "description": "Path to the gortex executable. Leave as 'gortex' to use PATH lookup."
+        },
+        "gortex.autoTrackWorkspace": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically offer to track newly opened workspaces with the Gortex daemon."
+        },
+        "gortex.statusBar.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show the Gortex daemon health item in the status bar."
+        },
+        "gortex.statusBar.refreshIntervalSec": {
+          "type": "number",
+          "default": 15,
+          "minimum": 3,
+          "maximum": 600,
+          "description": "How often the status bar polls 'gortex daemon status', in seconds."
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "gortex.daemon.start",
+        "title": "Start Daemon",
+        "category": "Gortex"
+      },
+      {
+        "command": "gortex.daemon.stop",
+        "title": "Stop Daemon",
+        "category": "Gortex"
+      },
+      {
+        "command": "gortex.daemon.restart",
+        "title": "Restart Daemon",
+        "category": "Gortex"
+      },
+      {
+        "command": "gortex.daemon.showStatus",
+        "title": "Show Daemon Status",
+        "category": "Gortex"
+      },
+      {
+        "command": "gortex.daemon.showLogs",
+        "title": "Show Daemon Logs",
+        "category": "Gortex"
+      },
+      {
+        "command": "gortex.workspace.track",
+        "title": "Track Current Workspace",
+        "category": "Gortex"
+      },
+      {
+        "command": "gortex.workspace.untrack",
+        "title": "Untrack Current Workspace",
+        "category": "Gortex"
+      },
+      {
+        "command": "gortex.symbol.find",
+        "title": "Find Symbol…",
+        "category": "Gortex"
+      },
+      {
+        "command": "gortex.symbol.callers",
+        "title": "Find Callers of Symbol Under Cursor",
+        "category": "Gortex"
+      },
+      {
+        "command": "gortex.symbol.usages",
+        "title": "Find Usages of Symbol Under Cursor",
+        "category": "Gortex"
+      },
+      {
+        "command": "gortex.symbol.blastRadius",
+        "title": "Show Blast Radius of Symbol Under Cursor",
+        "category": "Gortex"
+      },
+      {
+        "command": "gortex.views.refresh",
+        "title": "Refresh Gortex Views",
+        "category": "Gortex",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "gortex.repos.openInExplorer",
+        "title": "Open Repository",
+        "category": "Gortex",
+        "icon": "$(folder-opened)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "gortex.views.refresh",
+          "when": "view == gortex.tracked || view == gortex.daemon",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "gortex.repos.openInExplorer",
+          "when": "view == gortex.tracked && viewItem == gortex.repo",
+          "group": "inline"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "gortex.symbol.callers",
+          "group": "navigation@10",
+          "when": "editorTextFocus"
+        },
+        {
+          "command": "gortex.symbol.usages",
+          "group": "navigation@11",
+          "when": "editorTextFocus"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "gortex.symbol.find",
+        "key": "ctrl+alt+g",
+        "mac": "cmd+alt+g"
+      },
+      {
+        "command": "gortex.symbol.callers",
+        "key": "ctrl+alt+c",
+        "mac": "cmd+alt+c",
+        "when": "editorTextFocus"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "gortex",
+          "title": "Gortex",
+          "icon": "images/sidebar.svg"
+        }
+      ]
+    },
+    "views": {
+      "gortex": [
+        {
+          "id": "gortex.tracked",
+          "name": "Tracked Repositories"
+        },
+        {
+          "id": "gortex.daemon",
+          "name": "Daemon"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "gortex.tracked",
+        "contents": "The Gortex daemon isn't running, or no repositories are tracked yet.\n\n[Start Daemon](command:gortex.daemon.start)\n[Track this workspace](command:gortex.workspace.track)\n\nLearn more in the [Getting Started walkthrough](command:workbench.action.openWalkthrough?%22gortexhq.gortex%23gortex.gettingStarted%22)."
+      }
+    ],
+    "walkthroughs": [
+      {
+        "id": "gortex.gettingStarted",
+        "title": "Get started with Gortex",
+        "description": "Wire up the graph-aware code intelligence engine in three steps.",
+        "steps": [
+          {
+            "id": "install",
+            "title": "Install the Gortex CLI",
+            "description": "The extension drives the local `gortex` binary.\n\n```sh\nbrew install zzet/tap/gortex\n```\n\nVerify with `gortex version`.",
+            "media": {
+              "markdown": "walkthroughs/install.md"
+            }
+          },
+          {
+            "id": "daemon",
+            "title": "Start the daemon",
+            "description": "The daemon holds the knowledge graph in memory and serves every MCP client at once.\n[Start Daemon](command:gortex.daemon.start)",
+            "media": {
+              "markdown": "walkthroughs/daemon.md"
+            },
+            "completionEvents": [
+              "onCommand:gortex.daemon.start"
+            ]
+          },
+          {
+            "id": "track",
+            "title": "Track this workspace",
+            "description": "Tell the daemon about the repo currently open in VS Code.\n[Track Current Workspace](command:gortex.workspace.track)",
+            "media": {
+              "markdown": "walkthroughs/track.md"
+            },
+            "completionEvents": [
+              "onCommand:gortex.workspace.track"
+            ]
+          },
+          {
+            "id": "try",
+            "title": "Try the graph",
+            "description": "Use the command palette to search symbols, find callers, or compute blast radius — or open Copilot Chat in agent mode and ask away.\n[Find Symbol…](command:gortex.symbol.find)",
+            "media": {
+              "markdown": "walkthroughs/try.md"
+            },
+            "completionEvents": [
+              "onCommand:gortex.symbol.find"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "watch": "tsc -p . -w",
+    "package": "vsce package",
+    "publish": "vsce publish",
+    "vscode:prepublish": "npm run compile"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/vscode": "^1.99.0",
+    "@vscode/vsce": "^3.2.0",
+    "typescript": "^5.4.0"
+  }
+}
