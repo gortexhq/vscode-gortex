@@ -98,106 +98,12 @@ export class GortexCli {
     return this.run(['untrack', absPath]);
   }
 
-  async findSymbol(query: string, indexPath: string, limit = 25): Promise<SymbolHit[]> {
-    const out = await this.run([
-      'query',
-      'symbol',
-      query,
-      '--format',
-      'json',
-      '--index',
-      indexPath,
-      '--limit',
-      String(limit),
-    ]);
-    return parseJsonArray<SymbolHit>(out);
-  }
-
-  async callers(symbolId: string, indexPath: string, depth = 2): Promise<GraphHit[]> {
-    const out = await this.run([
-      'query',
-      'callers',
-      symbolId,
-      '--format',
-      'json',
-      '--index',
-      indexPath,
-      '--depth',
-      String(depth),
-    ]);
-    return parseJsonArray<GraphHit>(out);
-  }
-
-  async usages(symbolId: string, indexPath: string): Promise<GraphHit[]> {
-    const out = await this.run([
-      'query',
-      'usages',
-      symbolId,
-      '--format',
-      'json',
-      '--index',
-      indexPath,
-    ]);
-    return parseJsonArray<GraphHit>(out);
-  }
-
-  async dependents(symbolId: string, indexPath: string, depth = 3): Promise<GraphHit[]> {
-    const out = await this.run([
-      'query',
-      'dependents',
-      symbolId,
-      '--format',
-      'json',
-      '--index',
-      indexPath,
-      '--depth',
-      String(depth),
-    ]);
-    return parseJsonArray<GraphHit>(out);
-  }
-}
-
-export interface SymbolHit {
-  id: string;
-  kind: string;
-  name: string;
-  file_path: string;
-  start_line?: number;
-  end_line?: number;
-  language?: string;
-  meta?: Record<string, unknown>;
-}
-
-export interface GraphHit {
-  id: string;
-  kind?: string;
-  name?: string;
-  file_path?: string;
-  start_line?: number;
-  end_line?: number;
-  depth?: number;
 }
 
 export class CliError extends Error {
   constructor(message: string, public readonly cause?: Error) {
     super(message);
     this.name = 'CliError';
-  }
-}
-
-/**
- * The CLI sometimes mixes a JSON array with leading zap logger lines. We pull
- * out the first JSON array we can find so callers don't have to worry about it.
- */
-function parseJsonArray<T>(out: string): T[] {
-  const trimmed = out.trim();
-  const start = trimmed.indexOf('[');
-  if (start === -1) return [];
-  const slice = trimmed.slice(start);
-  try {
-    return JSON.parse(slice) as T[];
-  } catch {
-    return [];
   }
 }
 

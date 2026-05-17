@@ -5,6 +5,29 @@ All notable changes to **Gortex for VS Code** are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.1.1] - 2026-05-17
+
+### Changed
+- **Symbol queries now go through the daemon over MCP** instead of spawning
+  `gortex query --index <path>` per call. Cold-call latency drops from ~6-12s
+  (the CLI re-indexed the whole repo every invocation) to ~30-100ms on a
+  warm daemon. One long-lived `gortex mcp` subprocess is kept open.
+- **Status bar poll cadence** default bumped from 15s to 60s. Daemon-control
+  commands still trigger an immediate refresh, so the slower cadence is
+  invisible during interactive use.
+- **Default keybindings** changed to chord-style to avoid collisions with
+  built-in VS Code bindings (the previous `⌘⌥G` collided with "Find Next
+  Selection"):
+  - Find Symbol… → `⌘K G` / `Ctrl+K G`
+  - Callers → `⌘K C` / `Ctrl+K C`
+  - Usages → `⌘K U` / `Ctrl+K U`
+  - Blast Radius → `⌘K B` / `Ctrl+K B`
+
+### Fixed
+- Status bar spinner showing forever: the regex `/warmup|warming/` matched
+  the parenthetical `(warmup 10s)` annotation that the daemon prints *after*
+  it finishes warming. Now we look for `^ready\b` instead.
+
 ## [0.1.0] - 2026-05-17
 
 First public release.

@@ -1,6 +1,9 @@
 import * as vscode from 'vscode';
 import { GortexCli } from './daemon';
 import { GortexMcpProvider } from './mcp';
+import { McpClient } from './mcpClient';
+import { GraphQueries } from './query';
+import { RepoIndex } from './repoIndex';
 import { StatusBar } from './statusBar';
 import { TrackedReposProvider } from './views/trackedRepos';
 import { DaemonInfoProvider } from './views/daemonInfo';
@@ -15,6 +18,10 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(output);
 
   const cli = new GortexCli(output);
+  const mcpClient = new McpClient(output);
+  const queries = new GraphQueries(mcpClient);
+  const repos = new RepoIndex();
+  context.subscriptions.push(mcpClient);
 
   const mcpProvider = new GortexMcpProvider();
   context.subscriptions.push(
@@ -34,18 +41,18 @@ export function activate(context: vscode.ExtensionContext): void {
   statusBar.onDidUpdate(status => {
     reposProvider.setStatus(status);
     daemonProvider.setStatus(status);
+    repos.update(status);
   });
 
   registerDaemonCommands(context, cli, output, statusBar);
   registerWorkspaceCommands(context, cli, statusBar);
-  registerSymbolCommands(context, cli);
+  registerSymbolCommands(context, queries, repos);
   registerRepoCommands(context);
 
   context.subscriptions.push(
     vscode.commands.registerCommand('gortex.views.refresh', () => statusBar.refresh()),
   );
 
-  // React to settings changes without forcing a window reload.
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration(e => {
       if (e.affectsConfiguration('gortex.statusBar')) {
@@ -63,13 +70,13 @@ export function activate(context: vscode.ExtensionContext): void {
 }
 
 export function deactivate(): void {
-  // Nothing to do — every disposable is registered on the context.
+  // Every disposable is registered on the context; nothing else to clean up.
 }
 
 /**
  * If the user has `autoTrackWorkspace` on and the daemon isn't already tracking
- * the current folder, surface a one-shot prompt. We never auto-track silently
- * — the user always gets to say yes.
+ * the current folder, surface a one-shot prompt. We never auto-track silently —
+ * the user always gets to say yes.
  */
 async function maybeOfferAutoTrack(cli: GortexCli, statusBar: StatusBar): Promise<void> {
   if (!readConfig().autoTrackWorkspace) return;

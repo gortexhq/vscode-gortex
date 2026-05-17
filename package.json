@@ -2,7 +2,7 @@
   "name": "gortex",
   "displayName": "Gortex",
   "description": "Code intelligence engine — graph-aware MCP tools for symbol search, call-chains, blast-radius, and structural edits.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "gortexhq",
   "license": "MIT",
   "icon": "images/icon.png",
@@ -61,10 +61,10 @@
         },
         "gortex.statusBar.refreshIntervalSec": {
           "type": "number",
-          "default": 15,
+          "default": 60,
           "minimum": 3,
           "maximum": 600,
-          "description": "How often the status bar polls 'gortex daemon status', in seconds."
+          "description": "How often the status bar polls 'gortex daemon status', in seconds. Daemon control commands trigger an immediate refresh regardless."
         }
       }
     },
@@ -168,13 +168,25 @@
     "keybindings": [
       {
         "command": "gortex.symbol.find",
-        "key": "ctrl+alt+g",
-        "mac": "cmd+alt+g"
+        "key": "ctrl+k g",
+        "mac": "cmd+k g"
       },
       {
         "command": "gortex.symbol.callers",
-        "key": "ctrl+alt+c",
-        "mac": "cmd+alt+c",
+        "key": "ctrl+k c",
+        "mac": "cmd+k c",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "gortex.symbol.usages",
+        "key": "ctrl+k u",
+        "mac": "cmd+k u",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "gortex.symbol.blastRadius",
+        "key": "ctrl+k b",
+        "mac": "cmd+k b",
         "when": "editorTextFocus"
       }
     ],

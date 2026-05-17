@@ -50,8 +50,10 @@ export class StatusBar implements vscode.Disposable {
     }
     const totalNodes = s.workspaces?.reduce((acc, w) => acc + w.nodes, 0) ?? 0;
     const repoCount = s.repos.length;
-    const warming = s.state && /warmup|warming/i.test(s.state);
-    const icon = warming ? '$(sync~spin)' : '$(pulse)';
+    // The daemon's `state` looks like `ready (warmup 10s)` once warmed,
+    // or `warming up` / `indexing` while not. Only spin when not ready.
+    const ready = !s.state || /^\s*ready\b/i.test(s.state);
+    const icon = ready ? '$(pulse)' : '$(sync~spin)';
     this.item.text = `${icon} Gortex · ${repoCount} repos · ${formatCount(totalNodes)} nodes`;
     this.item.tooltip = buildTooltip(s);
     this.item.backgroundColor = undefined;

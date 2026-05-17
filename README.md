@@ -16,7 +16,9 @@ The extension does three jobs at once:
    session count.
 3. **Adds first-class graph commands**: find symbols, jump to callers or
    usages of the symbol under the cursor, compute blast radius — all from
-   the command palette or via keybindings.
+   the command palette or via keybindings. Queries go through a long-lived
+   `gortex mcp` subprocess that proxies to the daemon, so every call lands
+   in ~30-100ms instead of re-indexing the repo from scratch.
 
 ## Prerequisites
 
@@ -40,16 +42,17 @@ VS Code → Extensions panel → search **Gortex** → Install.
 Or sideload a local build:
 
 ```sh
-code --install-extension gortex-0.1.0.vsix
+code --install-extension gortex-0.1.1.vsix
 ```
 
 ## What you get
 
 ### Status bar
 
-A status bar item polls `gortex daemon status` every 15 seconds (configurable)
+A status bar item polls `gortex daemon status` every 60 seconds (configurable)
 and shows the daemon state, tracked-repo count, and total graph nodes. Click
-it for the full status dump or to start a stopped daemon.
+it for the full status dump or to start a stopped daemon. Daemon-control
+commands trigger an immediate refresh.
 
 ### Activity Bar panel
 
@@ -64,10 +67,10 @@ A new **Gortex** icon in the activity bar opens two tree views:
 
 | Command | Default keybinding |
 |---|---|
-| Find Symbol… | `⌘⌥G` / `Ctrl+Alt+G` |
-| Find Callers of Symbol Under Cursor | `⌘⌥C` / `Ctrl+Alt+C` |
-| Find Usages of Symbol Under Cursor | — |
-| Show Blast Radius of Symbol Under Cursor | — |
+| Find Symbol… | `⌘K G` / `Ctrl+K G` |
+| Find Callers of Symbol Under Cursor | `⌘K C` / `Ctrl+K C` |
+| Find Usages of Symbol Under Cursor | `⌘K U` / `Ctrl+K U` |
+| Show Blast Radius of Symbol Under Cursor | `⌘K B` / `Ctrl+K B` |
 | Start / Stop / Restart Daemon | — |
 | Track / Untrack Current Workspace | — |
 | Show Daemon Status | — |
@@ -105,7 +108,7 @@ this extension loaded.
 ## Package + publish
 
 ```sh
-npm run package      # → gortex-0.1.0.vsix
+npm run package      # → gortex-0.1.1.vsix
 npm run publish      # requires `vsce login gortexhq`
 ```
 

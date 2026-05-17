@@ -1,53 +1,41 @@
 import * as vscode from 'vscode';
-import { GortexCli, GraphHit, SymbolHit } from '../daemon';
+import { GraphQueries, GraphNode, SymbolHit } from '../query';
+import { RepoIndex } from '../repoIndex';
 
 export function registerSymbolCommands(
   context: vscode.ExtensionContext,
-  cli: GortexCli,
+  queries: GraphQueries,
+  repos: RepoIndex,
 ): void {
   context.subscriptions.push(
-    vscode.commands.registerCommand('gortex.symbol.find', () => findSymbol(cli)),
-    vscode.commands.registerCommand('gortex.symbol.callers', () => graphFromCursor(cli, 'callers')),
-    vscode.commands.registerCommand('gortex.symbol.usages', () => graphFromCursor(cli, 'usages')),
-    vscode.commands.registerCommand('gortex.symbol.blastRadius', () => graphFromCursor(cli, 'dependents')),
+    vscode.commands.registerCommand('gortex.symbol.find', () => findSymbol(queries, repos)),
+    vscode.commands.registerCommand('gortex.symbol.callers', () => graphFromCursor(queries, repos, 'callers')),
+    vscode.commands.registerCommand('gortex.symbol.usages', () => graphFromCursor(queries, repos, 'usages')),
+    vscode.commands.registerCommand('gortex.symbol.blastRadius', () => graphFromCursor(queries, repos, 'dependents')),
   );
 }
 
-async function findSymbol(cli: GortexCli): Promise<void> {
-  const folder = activeFolder();
-  if (!folder) return;
+async function findSymbol(queries: GraphQueries, repos: RepoIndex): Promise<void> {
   const query = await vscode.window.showInputBox({
     prompt: 'Find symbol in graph',
     placeHolder: 'e.g. parseDaemonStatus, UserService',
   });
   if (!query) return;
   const hits = await withProgress(`Gortex: searching for "${query}"…`, () =>
-    cli.findSymbol(query, folder.uri.fsPath, 50),
+    queries.searchSymbols(query, 50),
   );
   if (hits.length === 0) {
     vscode.window.showInformationMessage(`No symbols matched "${query}".`);
     return;
   }
-  const items: (vscode.QuickPickItem & { hit: SymbolHit })[] = hits.map(hit => ({
-    label: `$(symbol-${iconForKind(hit.kind)}) ${hit.name}`,
-    description: hit.kind,
-    detail: `${hit.file_path}${hit.start_line ? `:${hit.start_line}` : ''}`,
-    hit,
-  }));
-  const pick = await vscode.window.showQuickPick(items, {
-    matchOnDescription: true,
-    matchOnDetail: true,
-    placeHolder: `${hits.length} match${hits.length === 1 ? '' : 'es'} — pick one to open`,
-  });
+  const pick = await pickSymbolHit(hits, `${hits.length} match${hits.length === 1 ? '' : 'es'} — pick one to open`);
   if (!pick) return;
-  await openHit(folder, pick.hit.file_path, pick.hit.start_line);
+  await openHit(repos, pick);
 }
 
 type GraphKind = 'callers' | 'usages' | 'dependents';
 
-async function graphFromCursor(cli: GortexCli, kind: GraphKind): Promise<void> {
-  const folder = activeFolder();
-  if (!folder) return;
+async function graphFromCursor(queries: GraphQueries, repos: RepoIndex, kind: GraphKind): Promise<void> {
   const editor = vscode.window.activeTextEditor;
   if (!editor) {
     vscode.window.showWarningMessage('Open a file and place the cursor on a symbol first.');
@@ -58,72 +46,76 @@ async function graphFromCursor(cli: GortexCli, kind: GraphKind): Promise<void> {
     vscode.window.showWarningMessage('No symbol under cursor.');
     return;
   }
-  const hits = await withProgress(`Gortex: resolving "${word}"…`, () =>
-    cli.findSymbol(word, folder.uri.fsPath, 25),
+  const candidates = await withProgress(`Gortex: resolving "${word}"…`, () =>
+    queries.searchSymbols(word, 25),
   );
-  if (hits.length === 0) {
+  if (candidates.length === 0) {
     vscode.window.showInformationMessage(`No graph node found for "${word}".`);
     return;
   }
-  const symbol = hits.length === 1
-    ? hits[0]
-    : (await pickSymbol(hits, word));
+  const symbol = candidates.length === 1
+    ? candidates[0]
+    : await pickSymbolHit(candidates, `Multiple matches for "${word}" — pick the one you mean`);
   if (!symbol) return;
 
   const label = labelFor(kind);
-  const results = await withProgress(`Gortex: ${label} of ${symbol.name}…`, () => {
+  const nodes = await withProgress(`Gortex: ${label} of ${symbol.name}…`, () => {
     switch (kind) {
-      case 'callers':    return cli.callers(symbol.id, folder.uri.fsPath, 2);
-      case 'usages':     return cli.usages(symbol.id, folder.uri.fsPath);
-      case 'dependents': return cli.dependents(symbol.id, folder.uri.fsPath, 3);
+      case 'callers':    return queries.callers(symbol.id, 2, 50);
+      case 'usages':     return queries.usages(symbol.id, 50);
+      case 'dependents': return queries.dependents(symbol.id, 3, 50);
     }
   });
-  if (results.length === 0) {
+  if (nodes.length === 0) {
     vscode.window.showInformationMessage(`No ${label} for ${symbol.name}.`);
     return;
   }
-  const items: (vscode.QuickPickItem & { hit: GraphHit })[] = results.map(hit => ({
-    label: `$(symbol-${iconForKind(hit.kind)}) ${hit.name ?? hit.id}`,
-    description: hit.kind ?? '',
-    detail: `${hit.file_path ?? ''}${hit.start_line ? `:${hit.start_line}` : ''}` +
-            (hit.depth ? `   depth ${hit.depth}` : ''),
-    hit,
-  }));
-  const pick = await vscode.window.showQuickPick(items, {
-    matchOnDescription: true,
-    matchOnDetail: true,
-    placeHolder: `${results.length} ${label} of ${symbol.name} — pick one to open`,
-  });
+  const pick = await pickGraphNode(nodes, `${nodes.length} ${label} of ${symbol.name} — pick one to open`);
   if (!pick) return;
-  await openHit(folder, pick.hit.file_path ?? '', pick.hit.start_line);
+  await openHit(repos, pick);
 }
 
-async function pickSymbol(hits: SymbolHit[], word: string): Promise<SymbolHit | undefined> {
-  const items: (vscode.QuickPickItem & { hit: SymbolHit })[] = hits.map(h => ({
+async function pickSymbolHit(hits: SymbolHit[], placeHolder: string): Promise<SymbolHit | undefined> {
+  const items = hits.map(h => ({
     label: `$(symbol-${iconForKind(h.kind)}) ${h.name}`,
     description: h.kind,
     detail: `${h.file_path}${h.start_line ? `:${h.start_line}` : ''}`,
     hit: h,
   }));
-  const pick = await vscode.window.showQuickPick(items, {
-    placeHolder: `Multiple matches for "${word}" — pick the one you mean`,
+  const picked = await vscode.window.showQuickPick(items, {
+    matchOnDescription: true,
+    matchOnDetail: true,
+    placeHolder,
   });
-  return pick?.hit;
+  return picked?.hit;
 }
 
-async function openHit(
-  folder: vscode.WorkspaceFolder,
-  filePath: string,
-  line?: number,
-): Promise<void> {
-  if (!filePath) return;
-  const uri = filePath.startsWith('/')
-    ? vscode.Uri.file(filePath)
-    : vscode.Uri.joinPath(folder.uri, filePath);
+async function pickGraphNode(nodes: GraphNode[], placeHolder: string): Promise<GraphNode | undefined> {
+  const items = nodes.map(n => ({
+    label: `$(symbol-${iconForKind(n.kind)}) ${n.name ?? n.id}`,
+    description: n.kind ?? '',
+    detail: `${n.file_path ?? ''}${n.start_line ? `:${n.start_line}` : ''}`,
+    hit: n,
+  }));
+  const picked = await vscode.window.showQuickPick(items, {
+    matchOnDescription: true,
+    matchOnDetail: true,
+    placeHolder,
+  });
+  return picked?.hit;
+}
+
+async function openHit(repos: RepoIndex, hit: SymbolHit): Promise<void> {
+  if (!hit.file_path) return;
+  const uri = repos.resolve(hit.file_path);
+  if (!uri) {
+    vscode.window.showWarningMessage(`Couldn't locate ${hit.file_path} on disk.`);
+    return;
+  }
   const doc = await vscode.workspace.openTextDocument(uri);
   const editor = await vscode.window.showTextDocument(doc);
-  if (line && line > 0) {
-    const pos = new vscode.Position(Math.max(0, line - 1), 0);
+  if (hit.start_line && hit.start_line > 0) {
+    const pos = new vscode.Position(Math.max(0, hit.start_line - 1), 0);
     editor.selection = new vscode.Selection(pos, pos);
     editor.revealRange(new vscode.Range(pos, pos), vscode.TextEditorRevealType.InCenter);
   }
@@ -133,15 +125,6 @@ function wordAtCursor(editor: vscode.TextEditor): string | undefined {
   const range = editor.document.getWordRangeAtPosition(editor.selection.active);
   if (!range) return undefined;
   return editor.document.getText(range);
-}
-
-function activeFolder(): vscode.WorkspaceFolder | undefined {
-  const editor = vscode.window.activeTextEditor;
-  if (editor) {
-    const f = vscode.workspace.getWorkspaceFolder(editor.document.uri);
-    if (f) return f;
-  }
-  return vscode.workspace.workspaceFolders?.[0];
 }
 
 function iconForKind(kind: string | undefined): string {
