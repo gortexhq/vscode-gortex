@@ -5,6 +5,23 @@ All notable changes to **Gortex for VS Code** are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.3.2] - 2026-05-17
+
+### Fixed
+- **Inlay hints + CodeLens were showing stats from same-named symbols in
+  other repos.** When a freshly-added method like `func (b *Node) Test()`
+  didn't have a graph node yet (or its in-file hit fell off the top 25),
+  the provider silently fell back to `hits[0]` — whichever popular `Test`
+  function BM25 ranked first — and rendered its 36 callers / 46 dependents
+  as if they belonged to your function. Now requires both same `file_path`
+  **and** `start_line` within 10 lines of the document symbol; if no hit
+  matches, no hint renders. Output channel logs the symbol as "unresolved".
+
+### Note
+- If your `.gortex.yaml` has `watch.enabled: false`, freshly-edited symbols
+  won't appear in the graph until you re-index. Until then, those symbols
+  legitimately have no hint — which is what you now see.
+
 ## [0.3.1] - 2026-05-17
 
 ### Fixed

@@ -71,11 +71,13 @@ export class GortexInlayHintsProvider implements vscode.InlayHintsProvider {
       const queryName = bareName || sym.name;
 
       // Two-pronged lookup: try the bare name first, then fall back to the
-      // qualified name with a wider limit if nothing in-file matched. This
-      // handles languages whose LSP gives the bare name as well as those
-      // (like gopls) that qualify methods.
-      const hit = await this.resolve(queryName, repoRel)
-        ?? (queryName !== sym.name ? await this.resolve(sym.name, repoRel) : undefined);
+      // qualified name if needed. Both lookups require a same-file + near-line
+      // hit — without that we silently render nothing rather than guess.
+      //
+      // The +1 is because VS Code is 0-based and gortex is 1-based.
+      const targetLine = sym.selectionRange.start.line + 1;
+      const hit = await this.resolve(queryName, repoRel, targetLine)
+        ?? (queryName !== sym.name ? await this.resolve(sym.name, repoRel, targetLine) : undefined);
 
       if (!hit) {
         missed++;
@@ -118,15 +120,27 @@ export class GortexInlayHintsProvider implements vscode.InlayHintsProvider {
   }
 
   /**
-   * Look up a function/method name in the graph and prefer the hit that
-   * lives in the current file. Uses limit:25 because the daemon's BM25
-   * scoring sometimes returns nothing at limit:5 for names that share
-   * tokens with the rest of the corpus (`run`, `version`, etc.).
+   * Look up a function/method in the graph and require the hit to be in the
+   * current file at roughly the expected line. We never fall back to a
+   * different file: same-named symbols across repos (`Test`, `Run`, `init`,
+   * …) would otherwise hijack the hint and report a stranger's caller count
+   * as if it were yours.
+   *
+   * limit:25 is needed because the daemon's BM25 sometimes returns nothing
+   * at limit:5 for tokens that recur across the corpus.
    */
-  private async resolve(name: string, repoRel: string) {
+  private async resolve(name: string, repoRel: string, targetLine: number) {
     const hits = await this.queries.searchSymbols(name, 25).catch(() => []);
     if (hits.length === 0) return undefined;
-    return hits.find(h => h.file_path === repoRel) ?? hits[0];
+    // Same file is mandatory. Line tolerance handles small drift between
+    // VS Code's view of the file and the daemon's last-indexed snapshot;
+    // anything further than ~10 lines off is almost certainly a different
+    // overload (constructor + private impl on the same name, etc.).
+    return hits.find(h =>
+      h.file_path === repoRel &&
+      typeof h.start_line === 'number' &&
+      Math.abs(h.start_line - targetLine) <= 10,
+    );
   }
 }
 

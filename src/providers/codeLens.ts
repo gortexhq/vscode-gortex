@@ -60,8 +60,25 @@ export class GortexCodeLensProvider implements vscode.CodeLensProvider {
     // Limit fan-out to keep request volume reasonable on huge files.
     const limited = targets.slice(0, 40);
     const lenses = await Promise.all(limited.map(async sym => {
-      const hits = await this.queries.searchSymbols(sym.name, 5).catch(() => []);
-      const hit = hits.find(h => h.file_path === repoRelPath) ?? hits[0];
+      // Prefer the bare identifier (gopls qualifies methods as
+      // `(*Handler).foo` in sym.name, which poisons BM25). selectionRange
+      // is the identifier span.
+      const bareName = (() => {
+        try { return document.getText(sym.selectionRange).trim(); }
+        catch { return sym.name; }
+      })();
+      const queryName = bareName || sym.name;
+      const targetLine = sym.selectionRange.start.line + 1; // gortex is 1-based
+
+      const hits = await this.queries.searchSymbols(queryName, 25).catch(() => []);
+      // Same-file + near-line match required. Without it, same-named symbols
+      // in other repos hijack the lens (e.g. every `Test` method shows the
+      // most popular test's caller count instead of its own).
+      const hit = hits.find(h =>
+        h.file_path === repoRelPath &&
+        typeof h.start_line === 'number' &&
+        Math.abs(h.start_line - targetLine) <= 10,
+      );
       if (!hit) return undefined;
       const [callers, dependents] = await Promise.all([
         this.queries.callers(hit.id, 1, 200).catch(() => []),
