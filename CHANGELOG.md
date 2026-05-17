@@ -5,6 +5,20 @@ All notable changes to **Gortex for VS Code** are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.3.6] - 2026-05-17
+
+### Fixed
+- **Gutter icons + file decorations were silently truncated.** The
+  AnalyzeCache fetched `dead_code` / `hotspots` with the daemon's default
+  byte budget, which caps the response at the alphabetically-first ~165
+  entries. Symbols later in the sort order (anything past, say, `c…`
+  alphabetically) never reached the cache — so 💀 and 🔥 icons just
+  silently weren't placed. Now passes `max_bytes: 0` to opt out of the
+  budget for analyze calls, since the cache is local and a few KB per
+  entry. Goes hand in hand with the gortex commit `deadcode: respect
+  Go's /internal/ visibility rule` which makes exported symbols inside
+  `internal/` packages eligible for dead-code analysis.
+
 ## [0.3.5] - 2026-05-17
 
 ### Added

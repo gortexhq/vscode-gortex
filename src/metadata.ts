@@ -121,10 +121,18 @@ export class AnalyzeCache implements vscode.Disposable {
   allCycles(): AnalyzeCycle[] { return this.cycles; }
 
   async refresh(): Promise<void> {
+    // `max_bytes: 0` opts out of the daemon's per-response byte budget;
+    // a generous `limit` overrides the row-count cap. Without both, the
+    // response is sorted alphabetically by file path then truncated, so
+    // any hotspot or dead symbol whose file sorts past the cut never
+    // reaches the gutter or file decorations. We're populating a local
+    // cache that's tens of KB at most — a full payload is the right
+    // call here, even on workspaces with 100k+ dead entries.
+    const wideOpts = { limit: 100000, max_bytes: 0 };
     const [hot, dead, cycles] = await Promise.all([
-      this.queries.analyze('hotspots', { limit: 500 }).catch(() => ({ hotspots: [] })),
-      this.queries.analyze('dead_code', { limit: 1000 }).catch(() => ({ dead_code: [] })),
-      this.queries.analyze('cycles', { limit: 100 }).catch(() => ({ cycles: [] })),
+      this.queries.analyze('hotspots', wideOpts).catch(() => ({ hotspots: [] })),
+      this.queries.analyze('dead_code', wideOpts).catch(() => ({ dead_code: [] })),
+      this.queries.analyze('cycles', wideOpts).catch(() => ({ cycles: [] })),
     ]);
     this.hotspotsByFile = bucketByFile((hot as { hotspots?: AnalyzeSymbol[] }).hotspots ?? []);
     this.deadByFile = bucketByFile((dead as { dead_code?: AnalyzeSymbol[] }).dead_code ?? []);
