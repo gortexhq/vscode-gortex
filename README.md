@@ -30,7 +30,7 @@ brew install zzet/tap/gortex
 curl -fsSL https://get.gortex.dev | sh
 ```
 
-Verify with `gortex version` (extension v0.1.0 expects `v0.27` or newer).
+Verify with `gortex version` (extension v0.3.8 expects `v0.28.0` or newer).
 
 If the binary lives somewhere unusual, set **`gortex.binaryPath`** in your
 VS Code settings.
@@ -42,7 +42,7 @@ VS Code → Extensions panel → search **Gortex** → Install.
 Or sideload a local build:
 
 ```sh
-code --install-extension gortex-0.3.0.vsix
+code --install-extension gortex-0.3.8.vsix
 ```
 
 ## What you get
@@ -106,6 +106,13 @@ required:
   **across the workspace** gets a subtle underline (built-in only covers
   the open file).
 - **Gutter icons** — 🔥 next to hotspots, 💀 next to dead-code candidates.
+  Dead-code skulls are restricted to top-level definitional kinds (function,
+  method, type, interface) — params, closures, struct fields, npm modules,
+  extracted strings, and the like are filtered out because the graph can't
+  always evaluate them as a "dead?" question. The daemon ships this filter
+  by default and the extension applies the same filter as defense-in-depth.
+  Pass `include_fields=true` / `include_constants=true` to the daemon's
+  `analyze kind=dead_code` if you want the lower-signal kinds back.
 - **File-tree + tab decorations** — color tint and badge per file based on
   hotspot density.
 
@@ -183,8 +190,8 @@ this extension loaded.
 ## Package + publish
 
 ```sh
-npm run package      # → gortex-0.1.1.vsix
-npm run publish      # requires `vsce login gortexhq`
+npm run package      # → gortex-<version>.vsix
+npm run publish      # requires `vsce login Gortex`
 ```
 
 ## License
