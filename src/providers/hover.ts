@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { GraphQueries } from '../query';
+import { pathEndsWith } from '../repoIndex';
 
 /**
  * On hover, shows graph stats for the symbol under the cursor:
@@ -19,7 +20,7 @@ export class GortexHoverProvider implements vscode.HoverProvider {
     if (!word) return undefined;
     const hits = await this.queries.searchSymbols(word, 5);
     if (token.isCancellationRequested || hits.length === 0) return undefined;
-    const best = hits.find(h => document.uri.fsPath.endsWith(h.file_path)) ?? hits[0];
+    const best = hits.find(h => pathEndsWith(document.uri.fsPath, h.file_path)) ?? hits[0];
 
     // Run the three counts in parallel — they're independent.
     const [callers, dependents, usages] = await Promise.all([

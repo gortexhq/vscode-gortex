@@ -3,7 +3,7 @@ import { GortexCli } from './daemon';
 import { GortexMcpProvider } from './mcp';
 import { McpClient } from './mcpClient';
 import { GraphQueries } from './query';
-import { RepoIndex } from './repoIndex';
+import { RepoIndex, samePath } from './repoIndex';
 import { MetadataCache, AnalyzeCache } from './metadata';
 import { ActiveSymbolTracker } from './activeSymbol';
 import { StatusBar } from './statusBar';
@@ -236,7 +236,7 @@ async function maybeOfferAutoTrack(cli: GortexCli, statusBar: StatusBar): Promis
     return;
   }
   if (!status.running) return;
-  const already = status.repos.some(r => r.path === folder.uri.fsPath);
+  const already = status.repos.some(r => samePath(r.path, folder.uri.fsPath));
   if (already) return;
   const pick = await vscode.window.showInformationMessage(
     `Track ${folder.name} with Gortex?`,

@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { GraphQueries } from '../query';
-import { RepoIndex } from '../repoIndex';
+import { RepoIndex, pathEndsWith } from '../repoIndex';
 
 /**
  * Backs `⇧F12` (Find All References) with Gortex `find_usages`. Off by default
@@ -84,6 +84,6 @@ async function resolveSymbolAtCursor<T>(
 }
 
 function pickBestHit<T extends { file_path: string }>(hits: T[], fsPath: string): T {
-  const sameFile = hits.find(h => fsPath.endsWith(h.file_path));
+  const sameFile = hits.find(h => pathEndsWith(fsPath, h.file_path));
   return sameFile ?? hits[0];
 }

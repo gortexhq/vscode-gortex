@@ -2,7 +2,7 @@
   "name": "gortex",
   "displayName": "Gortex",
   "description": "Code intelligence engine — graph-aware MCP tools for symbol search, call-chains, blast-radius, and structural edits.",
-  "version": "0.3.8",
+  "version": "0.3.9",
   "publisher": "Gortex",
   "license": "MIT",
   "icon": "images/icon.png",

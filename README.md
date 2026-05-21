@@ -30,7 +30,7 @@ brew install zzet/tap/gortex
 curl -fsSL https://get.gortex.dev | sh
 ```
 
-Verify with `gortex version` (extension v0.3.8 expects `v0.28.0` or newer).
+Verify with `gortex version` (extension v0.3.9 expects `v0.28.0` or newer).
 
 If the binary lives somewhere unusual, set **`gortex.binaryPath`** in your
 VS Code settings.
@@ -42,7 +42,7 @@ VS Code → Extensions panel → search **Gortex** → Install.
 Or sideload a local build:
 
 ```sh
-code --install-extension gortex-0.3.8.vsix
+code --install-extension gortex-0.3.9.vsix
 ```
 
 ## What you get

@@ -79,7 +79,7 @@ export function registerDaemonCommands(
             try { await cli.run(['daemon', 'stop']); } catch { /* maybe wasn't running */ }
 
             progress.report({ message: 'deleting snapshot cache…' });
-            const snapshot = path.join(os.homedir(), '.cache', 'gortex', 'daemon.gob.gz');
+            const snapshot = daemonSnapshotPath();
             try { fs.unlinkSync(snapshot); output.appendLine(`removed ${snapshot}`); }
             catch (err) {
               if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
@@ -134,4 +134,25 @@ function delay(ms: number): Promise<void> {
 
 function shellQuote(s: string): string {
   return /[\s"']/.test(s) ? `"${s.replace(/"/g, '\\"')}"` : s;
+}
+
+/**
+ * Absolute path of the daemon's graph snapshot — mirrors gortex's
+ * internal/daemon.SnapshotPath():
+ *   - `$GORTEX_DAEMON_SNAPSHOT` wins if set.
+ *   - Windows: `%LocalAppData%\gortex\daemon.gob.gz`.
+ *   - macOS / Linux: `$HOME/.cache/gortex/daemon.gob.gz`.
+ *   - Last resort: the OS temp dir.
+ */
+function daemonSnapshotPath(): string {
+  const override = process.env.GORTEX_DAEMON_SNAPSHOT;
+  if (override) return override;
+  if (process.platform === 'win32') {
+    const local = process.env.LOCALAPPDATA;
+    if (local) return path.join(local, 'gortex', 'daemon.gob.gz');
+    return path.join(os.tmpdir(), 'gortex-daemon.gob.gz');
+  }
+  const home = os.homedir();
+  if (home) return path.join(home, '.cache', 'gortex', 'daemon.gob.gz');
+  return path.join(os.tmpdir(), 'gortex-daemon.gob.gz');
 }

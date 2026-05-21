@@ -51,9 +51,39 @@ export class McpClient implements vscode.Disposable {
       protocolVersion: '2025-03-26',
       capabilities: { resources: { subscribe: true } },
       clientInfo: { name: 'vscode-gortex', version: '0.2.0' },
-    }).then(() => {
+    }).then(async () => {
       this.send({ jsonrpc: '2.0', method: 'notifications/initialized' });
+      await this.promoteDeferredTools();
     });
+  }
+
+  /**
+   * Promote the subscribe/unsubscribe tool pairs out of the daemon's lazy
+   * tool catalog. Gortex's lazy-tool registration withholds non-"hot"
+   * tools — including every `subscribe_*` / `unsubscribe_*` pair — from
+   * `tools/list`, and they are not callable via `tools/call` until
+   * promoted. `tools_search` is itself eagerly registered; a `select:`
+   * query promotes the named tools into the live server for the rest of
+   * the daemon's lifetime.
+   *
+   * Best-effort: an older daemon (no lazy tools) already has these tools
+   * live and treats the `select:` as a harmless lookup; a daemon with
+   * the registry disabled likewise. Failures are swallowed so a hiccup
+   * here never blocks startup — worst case the subscriptions degrade
+   * gracefully (their call sites all defend against a failed subscribe).
+   */
+  private async promoteDeferredTools(): Promise<void> {
+    const names = SUBSCRIPTION_TOPICS.flatMap(t => [`subscribe_${t}`, `unsubscribe_${t}`]);
+    try {
+      // request() directly, not callTool() — callTool awaits ensureReady(),
+      // which would deadlock on the still-pending spawn promise we're inside.
+      await this.request('tools/call', {
+        name: 'tools_search',
+        arguments: { query: `select:${names.join(',')}` },
+      });
+    } catch (err) {
+      this.output.appendLine(`tools_search promotion failed: ${(err as Error).message}`);
+    }
   }
 
   /**
@@ -205,11 +235,19 @@ export class McpClient implements vscode.Disposable {
   }
 }
 
-export type NotificationTopic =
-  | 'daemon_health'
-  | 'workspace_readiness'
-  | 'stale_refs'
-  | 'diagnostics';
+/**
+ * The server-push topics the extension knows about. Doubles as the list
+ * of `subscribe_*` / `unsubscribe_*` tool pairs promoted out of the
+ * daemon's lazy-tool catalog at connect time — see promoteDeferredTools.
+ */
+export const SUBSCRIPTION_TOPICS = [
+  'daemon_health',
+  'workspace_readiness',
+  'stale_refs',
+  'diagnostics',
+] as const;
+
+export type NotificationTopic = (typeof SUBSCRIPTION_TOPICS)[number];
 
 export type NotificationListener = (params: unknown) => void;
 
