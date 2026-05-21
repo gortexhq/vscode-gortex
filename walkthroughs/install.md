@@ -16,14 +16,22 @@ or, if you'd rather not use Homebrew:
 curl -fsSL https://get.gortex.dev | sh
 ```
 
+## Windows
+
+In PowerShell:
+
+```powershell
+irm https://get.gortex.dev/install.ps1 | iex
+```
+
 ## Verify
 
 ```sh
 gortex version
 ```
 
-You should see something like `gortex v0.27.0` — any version `0.27` or newer
-is fine for the extension's v0.1.0.
+You should see something like `gortex v0.31.0` — any version `v0.28.0` or
+newer is fine for this extension.
 
 If `gortex` isn't on your `PATH`, set the **`gortex.binaryPath`** setting to
 the absolute path of the binary.

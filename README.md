@@ -22,12 +22,20 @@ The extension does three jobs at once:
 
 ## Prerequisites
 
-The `gortex` binary must be on your `PATH`:
+The `gortex` binary must be on your `PATH`.
+
+**macOS / Linux:**
 
 ```sh
 brew install zzet/tap/gortex
 # or
 curl -fsSL https://get.gortex.dev | sh
+```
+
+**Windows (PowerShell):**
+
+```powershell
+irm https://get.gortex.dev/install.ps1 | iex
 ```
 
 Verify with `gortex version` (extension v0.3.9 expects `v0.28.0` or newer).
